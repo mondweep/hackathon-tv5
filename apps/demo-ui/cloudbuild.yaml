@@ -75,6 +75,19 @@ steps:
       - '--port'
       - '8080'
 
+  # Step 4: Ensure public access IAM binding
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'set-iam-policy'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'services'
+      - 'add-iam-policy-binding'
+      - '${_SERVICE_NAME}'
+      - '--region=${_REGION}'
+      - '--member=allUsers'
+      - '--role=roles/run.invoker'
+
 images:
   - '${_ARTIFACT_REGISTRY}/${_GCP_PROJECT}/${_IMAGE_NAME}/${_SERVICE_NAME}:$SHORT_SHA'
   - '${_ARTIFACT_REGISTRY}/${_GCP_PROJECT}/${_IMAGE_NAME}/${_SERVICE_NAME}:latest'
