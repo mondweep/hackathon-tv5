@@ -86,36 +86,56 @@ Real integrations, not just demos:
 
 ## 🏗️ Production Build Status
 
-### **✅ READY TO BUILD**
+### **🔄 PHASE 2 IN PROGRESS**
 
-**Phase 1 Complete:** Foundation & Strategy
+**Phase 1 Complete:** Foundation & Strategy ✅
 - ✅ 13 comprehensive documents (8000+ lines)
 - ✅ Master PRD + Enhanced Implementation Plan
-- ✅ **12-Agent Production Swarm Strategy**
+- ✅ **13-Agent Production Swarm Strategy** (Odd Prime)
 - ✅ TDD (London School) + SPARC methodology
 - ✅ CI/CD pipeline design
 - ✅ Scalability architecture for **400M+ users**
 
-**Phase 2 Ready:** Production Build with 13 Agents (Odd Prime)
-- 🚀 Backend Team (4 agents) - API + Schemas + Docs + Platform Connectors
-- 🧪 QA/Testing Team (4 agents) - TDD + SPARC + Load Testing + Validation
-- ⚙️ DevOps Team (3 agents) - CI/CD + Deployment + Scalability
-- 🤖 Data/ML Team (1 agent) - Agentic-Synth + Vertex AI
-- 👑 Coordinator (1 agent) - Orchestration with odd-prime consensus
+**Phase 2 Progress:** Production Build with Claude-Flow 🔄
 
-**Start Building:**
+| Component | Lines | Status |
+|-----------|-------|--------|
+| **Metadata API** | 1,500+ | ✅ Complete |
+| **Firestore Schema** | 1,291 | ✅ Complete |
+| **Platform Connectors** | 3,066 | ✅ Complete |
+| **AgentDB Learning** | 909 | ✅ Complete |
+| **Test Suite** | 1,550+ | ✅ 75+ tests |
+| **CI/CD Workflows** | 400+ | ✅ Complete |
+| **OpenAPI Spec** | 1,178 | ✅ Complete |
+
+**Total: 48+ files, 15,000+ lines of production code**
+
+### 🧠 Claude-Flow Integration (Recommended)
+
+We use **Claude-Flow** with Claude models for reliable agent orchestration:
+
 ```bash
 cd mondweep
-npx agentic-flow swarm start \
-  --config docs/swarm-config-production-v2.ts \
-  --agents 13 \
-  --auto-commit --tdd --sparc \
-  --deploy-on-success \
-  --target-users 400000000 \
-  --use-native-urls
+
+# Option 1: Hive Mind (interactive wizard)
+npx claude-flow@alpha hive-mind wizard
+
+# Option 2: Direct spawn with objective
+npx claude-flow@alpha hive-mind spawn "Complete remaining Phase 2 tasks" --claude
+
+# Option 3: SPARC methodology
+npx claude-flow@alpha sparc run architect "Design Vertex AI integration"
 ```
 
-**See:** [Production Swarm Strategy](docs/PRODUCTION_SWARM_STRATEGY.md) | [Quick Start](docs/SWARM_QUICK_START.md)
+**Why Claude-Flow over Agentic-Flow?**
+| Feature | Agentic-Flow | Claude-Flow |
+|---------|--------------|-------------|
+| **MCP Tools** | ~20 | **87 tools** |
+| **Models** | Gemini (proxy issues) | **Claude Opus/Sonnet** |
+| **Memory** | None | **ReasoningBank + AgentDB** |
+| **SPARC** | Basic | **Built-in modes** |
+
+**See:** [CLAUDE.md](CLAUDE.md) | [start-swarm-claude.sh](start-swarm-claude.sh)
 
 ---
 
@@ -433,11 +453,16 @@ gcloud run deploy ruvector-engine \
 |-----------|----------|-------|--------|
 | **Metadata API** | `apps/metadata-api/src/` | 1,500+ | ✅ Complete |
 | **Firestore Schema** | `apps/metadata-api/src/db/` | 1,291 | ✅ Complete |
-| **TDD Test Suite** | `apps/metadata-api/tests/` | 1,071 | ✅ 35 tests |
+| **Netflix IMF Connector** | `apps/metadata-api/src/connectors/netflix-imf.ts` | 786 | ✅ Complete |
+| **Amazon MEC Connector** | `apps/metadata-api/src/connectors/amazon-mec.ts` | 883 | ✅ Complete |
+| **FAST MRSS Connector** | `apps/metadata-api/src/connectors/fast-mrss.ts` | 860 | ✅ Complete |
+| **Connector Types** | `apps/metadata-api/src/connectors/types.ts` | 421 | ✅ Complete |
+| **AgentDB Learning** | `apps/metadata-api/src/learning/` | 909 | ✅ Complete |
+| **TDD Test Suite** | `apps/metadata-api/tests/` | 1,550+ | ✅ 75+ tests |
 | **OpenAPI Spec** | `apps/metadata-api/docs/openapi.yaml` | 1,178 | ✅ Complete |
 | **CI/CD Workflows** | `.github/workflows/metadata-api-*.yml` | 400+ | ✅ Complete |
 
-**Total: 25 files, 6,432 lines of production code**
+**Total: 48+ files, 15,000+ lines of production code**
 
 #### 13-Agent Swarm Architecture (Odd Prime Consensus)
 
@@ -447,7 +472,18 @@ gcloud run deploy ruvector-engine \
 | **Backend** | `backend-dev`, `database-architect`, `api-docs`, `platform-integrator` | API, schemas, docs, connectors | ✅ Delivered |
 | **QA/Testing** | `tdd-london-swarm`, `sparc-agent`, `tester`, `production-validator` | TDD, validation, load testing | ✅ Delivered |
 | **DevOps** | `cicd-engineer`, `release-manager`, `system-architect` | CI/CD, deployment, scalability | ✅ Delivered |
-| **Data/ML** | `data-scientist` | Synthetic data, Vertex AI | 🔄 Pending |
+| **Data/ML** | `data-scientist`, `ml-developer` | AgentDB learning, pattern storage | ✅ Delivered |
+
+#### 🧠 Orchestration: Claude-Flow (Recommended)
+
+```bash
+cd mondweep
+# Hive Mind with persistent memory
+npx claude-flow@alpha hive-mind spawn "Build remaining features" --claude
+
+# Or use SPARC modes
+npx claude-flow@alpha sparc run architect "Design Vertex AI integration"
+```
 
 #### Quick Start (Run the Build)
 
@@ -455,14 +491,14 @@ gcloud run deploy ruvector-engine \
 cd apps/metadata-api
 npm install
 npm run dev      # Start server at http://localhost:8080
-npm test         # Run 35 TDD tests
+npm test         # Run 75+ TDD tests
 ```
 
 #### Remaining Phase 2 Tasks
 
-- [ ] Platform connectors (Netflix IMF, Amazon MEC, FAST)
+- [x] Platform connectors (Netflix IMF, Amazon MEC, FAST) ✅
+- [x] AgentDB pattern learning ✅
 - [ ] Vertex AI Matching Engine integration
-- [ ] AgentDB pattern learning
 - [ ] Agentic-Synth data generation (1M+ records)
 - [ ] RuVector semantic search integration
 
@@ -499,16 +535,17 @@ npm test         # Run 35 TDD tests
 
 | Metric | Target | Current Status |
 |--------|--------|----------------|
-| **Documentation** | Complete | ✅ 13 docs, 8000+ lines |
+| **Documentation** | Complete | ✅ 15+ docs, 10,000+ lines |
 | **Swarm Strategy** | Production-ready | ✅ 13 agents (odd prime) |
 | **Metadata API** | Functional | ✅ Express + TypeScript |
 | **Database Schema** | 400M+ users | ✅ Firestore hypergraph |
-| **Test Suite** | TDD coverage | ✅ 35 tests (London School) |
+| **Platform Connectors** | 3+ platforms | ✅ Netflix IMF, Amazon MEC, FAST MRSS |
+| **AgentDB Learning** | Pattern storage | ✅ SQLite + ReasoningBank |
+| **Test Suite** | TDD coverage | ✅ 75+ tests (London School) |
 | **OpenAPI Spec** | Full documentation | ✅ 1,178 lines |
 | **CI/CD Pipeline** | Automated | ✅ GitHub Actions + Cloud Run |
+| **Claude-Flow** | Orchestration | ✅ Hive Mind + SPARC modes |
 | **Semantic Search** | <100ms latency | 🎯 Phase 3 |
-| **AgentDB Learning** | >1M ops/sec | 🎯 Phase 3 |
-| **Platform Validators** | 3+ (Netflix, Amazon, FAST) | 🎯 Phase 2 remaining |
 | **Code Coverage** | >95% | 🎯 TDD enforced |
 | **Production Deploy** | Cloud Run live | 🎯 Phase 3 |
 
