@@ -13,6 +13,7 @@ import dotenv from 'dotenv';
 import metadataRoutes from './routes/metadata';
 import searchRoutes from './routes/search';
 import userRoutes from './routes/user';
+import aiRoutes from './routes/ai';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestLogger, logger } from './middleware/logger';
 import { metricsMiddleware, metricsHandler, healthCheckWithMetrics } from './middleware/metrics';
@@ -86,7 +87,9 @@ app.get('/', (_req: Request, res: Response) => {
       user: '/api/v1/user/:userId',
       userPreferences: '/api/v1/user/:userId/preferences',
       userLearning: '/api/v1/user/:userId/learning',
-      userHistory: '/api/v1/user/:userId/history'
+      userHistory: '/api/v1/user/:userId/history',
+      aiInterpret: '/api/v1/ai/interpret-query',
+      aiStatus: '/api/v1/ai/status'
     }
   });
 });
@@ -97,6 +100,7 @@ app.get('/', (_req: Request, res: Response) => {
 app.use('/api/v1/metadata', metadataRoutes);
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/user', userRoutes);
+app.use('/api/v1/ai', aiRoutes);
 
 /**
  * Error Handling

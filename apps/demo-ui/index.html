@@ -972,9 +972,11 @@
                             <p class="text-gray-400 mb-2">Recent searches (with AI interpretation):</p>
                             <div class="space-y-1 max-h-32 overflow-y-auto">
                                 <template x-for="(query, index) in (learningInsights.searchQueries || []).slice(0, 5)" :key="index">
-                                    <div class="text-xs bg-gray-800/50 rounded px-2 py-1">
+                                    <div class="text-xs bg-gray-800/50 rounded px-2 py-1 flex items-center gap-1">
+                                        <span x-show="query.method === 'gemini'" class="text-green-400" title="Interpreted by Gemini AI">🤖</span>
+                                        <span x-show="query.method !== 'gemini'" class="text-yellow-400" title="Rule-based interpretation">📝</span>
                                         <span class="text-gray-300" x-text="query.original"></span>
-                                        <span class="text-gray-500 mx-1">→</span>
+                                        <span class="text-gray-500">→</span>
                                         <span class="text-cyan-400" x-text="query.interpreted"></span>
                                     </div>
                                 </template>
@@ -1307,78 +1309,51 @@
                     this.loading = false;
                 },
 
-                // Natural Language Query Interpretation
-                // Extracts meaningful keywords from conversational queries
-                interpretQuery(query) {
+                // Natural Language Query Interpretation using Gemini AI
+                // Calls the API to interpret conversational queries
+                async interpretQuery(query) {
+                    const original = query.trim();
+
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/ai/interpret-query`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: original })
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.data) {
+                                const method = data.data.method === 'gemini' ? '🤖 Gemini' : '📝 Fallback';
+                                console.log(`NLP (${method}): "${original}" → "${data.data.interpreted}"`);
+                                return {
+                                    interpreted: data.data.interpreted,
+                                    method: data.data.method
+                                };
+                            }
+                        }
+                    } catch (error) {
+                        console.error('AI interpretation failed:', error);
+                    }
+
+                    // Client-side fallback if API fails
+                    const fallback = this.fallbackInterpret(original);
+                    console.log(`NLP (client fallback): "${original}" → "${fallback}"`);
+                    return { interpreted: fallback, method: 'client-fallback' };
+                },
+
+                // Client-side fallback interpretation
+                fallbackInterpret(query) {
                     const original = query.trim().toLowerCase();
-
-                    // Common filler phrases to remove
                     const fillerPhrases = [
-                        'i want to see', 'i want to watch', 'i would like to see', 'i would like to watch',
-                        'show me', 'find me', 'looking for', 'search for', 'i am looking for',
-                        'something about', 'something with', 'something that has', 'something that is',
-                        'movies about', 'movies with', 'movies that', 'films about', 'films with',
-                        'tv shows about', 'shows about', 'series about', 'series with',
-                        'anything about', 'anything with', 'anything that',
-                        'can you find', 'can you show', 'please find', 'please show',
-                        'i need', 'i\'m in the mood for', 'in the mood for',
-                        'that is', 'that has', 'that are', 'which has', 'which are',
-                        'with a lot of', 'featuring', 'involving', 'related to'
+                        'i want to see', 'i want to watch', 'show me', 'find me',
+                        'something about', 'something with', 'movies about', 'looking for'
                     ];
-
                     let cleaned = original;
-                    fillerPhrases.forEach(phrase => {
-                        cleaned = cleaned.replace(new RegExp(phrase, 'gi'), ' ');
-                    });
-
-                    // Remove common stop words
-                    const stopWords = ['a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-                        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
-                        'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used',
-                        'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into',
-                        'through', 'during', 'before', 'after', 'above', 'below', 'between',
-                        'and', 'but', 'or', 'nor', 'so', 'yet', 'both', 'either', 'neither',
-                        'not', 'only', 'own', 'same', 'than', 'too', 'very', 'just', 'also'];
-
-                    const words = cleaned.split(/\s+/).filter(word =>
-                        word.length > 1 && !stopWords.includes(word)
-                    );
-
-                    // Map common synonyms/concepts to TMDb-friendly search terms
-                    const conceptMap = {
-                        'animals': 'animal wildlife',
-                        'pets': 'pet dog cat',
-                        'space': 'space sci-fi',
-                        'scary': 'horror thriller',
-                        'funny': 'comedy',
-                        'romantic': 'romance love',
-                        'sad': 'drama emotional',
-                        'kids': 'family animation',
-                        'children': 'family animation',
-                        'superhero': 'superhero marvel dc',
-                        'mystery': 'mystery detective',
-                        'historical': 'history period drama',
-                        'war': 'war military',
-                        'crime': 'crime thriller',
-                        'magic': 'fantasy magic',
-                        'robots': 'robot sci-fi artificial intelligence',
-                        'aliens': 'alien sci-fi extraterrestrial',
-                        'zombies': 'zombie horror',
-                        'vampires': 'vampire horror',
-                        'dinosaurs': 'dinosaur prehistoric',
-                        'ocean': 'ocean sea underwater',
-                        'nature': 'nature documentary wildlife',
-                        'music': 'music musical',
-                        'sports': 'sports athletic',
-                        'cooking': 'cooking food culinary',
-                        'travel': 'travel adventure'
-                    };
-
-                    const expandedWords = words.map(word => conceptMap[word] || word);
-                    const keywords = expandedWords.join(' ').trim();
-
-                    console.log(`NLP: "${original}" → "${keywords}"`);
-                    return keywords || original;
+                    fillerPhrases.forEach(p => { cleaned = cleaned.replace(new RegExp(p, 'gi'), ' '); });
+                    const stopWords = ['a', 'an', 'the', 'is', 'are', 'to', 'of', 'in', 'for', 'on', 'with', 'that'];
+                    const words = cleaned.split(/\s+/).filter(w => w.length > 1 && !stopWords.includes(w));
+                    return words.join(' ').trim() || original;
                 },
 
                 async search() {
@@ -1388,11 +1363,12 @@
 
                     this.loading = true;
 
-                    // Interpret natural language query
-                    const interpretedQuery = this.interpretQuery(this.searchQuery);
+                    // Interpret natural language query using AI
+                    const interpretation = await this.interpretQuery(this.searchQuery);
+                    const interpretedQuery = interpretation.interpreted;
 
                     // Track search query in learning
-                    this.trackSearchQuery(this.searchQuery, interpretedQuery);
+                    this.trackSearchQuery(this.searchQuery, interpretedQuery, interpretation.method);
 
                     try {
                         // First, search TMDb for real movie/TV data
@@ -1477,7 +1453,7 @@
                 },
 
                 // Track search queries for learning
-                trackSearchQuery(originalQuery, interpretedQuery) {
+                trackSearchQuery(originalQuery, interpretedQuery, method = 'unknown') {
                     if (!this.learningInsights.searchQueries) {
                         this.learningInsights.searchQueries = [];
                     }
@@ -1485,6 +1461,7 @@
                     this.learningInsights.searchQueries.unshift({
                         original: originalQuery,
                         interpreted: interpretedQuery,
+                        method: method, // 'gemini', 'fallback', or 'client-fallback'
                         timestamp: new Date().toISOString()
                     });
 
