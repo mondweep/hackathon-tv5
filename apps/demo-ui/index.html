@@ -347,38 +347,52 @@
                                 class="bg-gray-800/50 rounded-xl overflow-hidden cursor-pointer card-hover transition-all duration-300 fade-in"
                             >
                                 <div class="aspect-[2/3] relative overflow-hidden">
+                                    <!-- TMDb Poster -->
+                                    <img
+                                        x-show="item.poster_path"
+                                        :src="'https://image.tmdb.org/t/p/w500' + item.poster_path"
+                                        :alt="item.title || item.name"
+                                        class="w-full h-full object-cover"
+                                        loading="lazy"
+                                    >
+                                    <!-- Fallback for no poster -->
                                     <div
+                                        x-show="!item.poster_path"
                                         class="w-full h-full flex items-center justify-center text-6xl"
                                         :style="'background: linear-gradient(135deg, ' + getGradient(item.genres?.[0] || 'default') + ')'"
                                     >
-                                        <span x-text="getEmoji(item.type)"></span>
+                                        <span x-text="getEmoji(item.media_type || item.type)"></span>
                                     </div>
                                     <div class="absolute top-2 left-2">
                                         <span
                                             class="px-2 py-1 text-xs font-medium rounded-full"
-                                            :class="item.type === 'movie' ? 'bg-blue-600' : 'bg-purple-600'"
-                                            x-text="item.type"
+                                            :class="(item.media_type || item.type) === 'movie' ? 'bg-blue-600' : 'bg-purple-600'"
+                                            x-text="item.media_type || item.type"
                                         ></span>
                                     </div>
+                                    <!-- TMDb badge -->
+                                    <div x-show="item.isTmdb" class="absolute top-2 right-2">
+                                        <span class="px-2 py-1 text-xs font-medium bg-green-600/80 rounded-full">TMDb</span>
+                                    </div>
                                     <!-- Watched badge -->
-                                    <div x-show="isWatched(item.id)" class="absolute top-2 right-2">
+                                    <div x-show="isWatched(item.id) && !item.isTmdb" class="absolute top-2 right-2">
                                         <span class="px-2 py-1 text-xs font-medium bg-green-600 rounded-full">✓ Watched</span>
+                                    </div>
+                                    <!-- Rating badge -->
+                                    <div x-show="item.vote_average" class="absolute bottom-2 right-2">
+                                        <span class="px-2 py-1 text-xs font-medium bg-yellow-600/90 rounded-full flex items-center gap-1">
+                                            ⭐ <span x-text="item.vote_average?.toFixed(1)"></span>
+                                        </span>
                                     </div>
                                 </div>
                                 <div class="p-4">
-                                    <h4 class="font-semibold truncate" x-text="item.title"></h4>
+                                    <h4 class="font-semibold truncate" x-text="item.title || item.name"></h4>
                                     <div class="flex items-center space-x-2 text-sm text-gray-400 mt-1">
-                                        <span x-text="item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'"></span>
-                                        <span>•</span>
-                                        <span x-text="item.rating || 'NR'"></span>
-                                        <span x-show="item.duration">•</span>
-                                        <span x-show="item.duration" x-text="item.duration + ' min'"></span>
+                                        <span x-text="(item.release_date || item.first_air_date || item.releaseDate) ? new Date(item.release_date || item.first_air_date || item.releaseDate).getFullYear() : 'N/A'"></span>
+                                        <span x-show="item.rating">•</span>
+                                        <span x-show="item.rating" x-text="item.rating"></span>
                                     </div>
-                                    <div class="flex flex-wrap gap-1 mt-2">
-                                        <template x-for="genre in (item.genres || []).slice(0, 2)" :key="genre">
-                                            <span class="px-2 py-0.5 text-xs bg-gray-700 rounded-full" x-text="genre"></span>
-                                        </template>
-                                    </div>
+                                    <p x-show="item.overview" class="text-xs text-gray-500 mt-2 line-clamp-2" x-text="item.overview"></p>
                                 </div>
                             </div>
                         </template>
@@ -430,14 +444,31 @@
                                     @click="selectItem(item)"
                                     class="bg-gray-800/50 rounded-xl overflow-hidden cursor-pointer card-hover transition-all duration-300 fade-in relative"
                                 >
-                                    <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500"></div>
+                                    <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 z-10"></div>
                                     <div class="aspect-[2/3] relative overflow-hidden">
+                                        <!-- TMDb Poster -->
+                                        <img
+                                            x-show="item.poster_path"
+                                            :src="'https://image.tmdb.org/t/p/w500' + item.poster_path"
+                                            :alt="item.title || item.name"
+                                            class="w-full h-full object-cover"
+                                            loading="lazy"
+                                        >
+                                        <!-- Fallback for no poster -->
                                         <div
+                                            x-show="!item.poster_path"
                                             class="w-full h-full flex items-center justify-center text-6xl"
                                             :style="'background: linear-gradient(135deg, ' + getGradient(item.genres?.[0] || 'default') + ')'"
                                         >
-                                            <span x-text="getEmoji(item.type)"></span>
+                                            <span x-text="getEmoji(item.media_type || item.type)"></span>
                                         </div>
+                                        <!-- Rating badge -->
+                                        <div x-show="item.vote_average" class="absolute top-2 right-2">
+                                            <span class="px-2 py-1 text-xs font-medium bg-yellow-600/90 rounded-full flex items-center gap-1">
+                                                ⭐ <span x-text="item.vote_average?.toFixed(1)"></span>
+                                            </span>
+                                        </div>
+                                        <!-- Recommendation reason -->
                                         <div class="absolute bottom-2 left-2 right-2">
                                             <div class="bg-black/70 rounded-lg px-2 py-1 text-xs">
                                                 <span class="text-indigo-400">Why: </span>
@@ -446,11 +477,11 @@
                                         </div>
                                     </div>
                                     <div class="p-4">
-                                        <h4 class="font-semibold truncate" x-text="item.title"></h4>
+                                        <h4 class="font-semibold truncate" x-text="item.title || item.name"></h4>
                                         <div class="flex items-center space-x-2 text-sm text-gray-400 mt-1">
-                                            <span x-text="item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'"></span>
-                                            <span>•</span>
-                                            <span x-text="item.rating || 'NR'"></span>
+                                            <span x-text="(item.release_date || item.first_air_date) ? new Date(item.release_date || item.first_air_date).getFullYear() : 'N/A'"></span>
+                                            <span x-show="item.media_type">•</span>
+                                            <span x-show="item.media_type" x-text="item.media_type === 'movie' ? '🎬 Movie' : '📺 TV'"></span>
                                         </div>
                                     </div>
                                 </div>
