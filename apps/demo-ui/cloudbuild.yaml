@@ -15,6 +15,7 @@ steps:
   # Step 1: Build Docker Image
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
+    dir: 'apps/demo-ui'
     args:
       - 'build'
       - '-t'
@@ -26,6 +27,7 @@ steps:
   # Step 2: Push to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
+    dir: 'apps/demo-ui'
     args:
       - 'push'
       - '--all-tags'
