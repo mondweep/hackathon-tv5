@@ -539,12 +539,21 @@ export class KnowledgeGraphStore {
     const collections = Object.values(COLLECTIONS);
 
     for (const collectionName of collections) {
-      const snapshot = await this.db.collection(collectionName).limit(500).get();
+      let deleted = 0;
+      let snapshot = await this.db.collection(collectionName).limit(500).get();
 
       while (!snapshot.empty) {
         const batch = this.db.batch();
         snapshot.docs.forEach(doc => batch.delete(doc.ref));
         await batch.commit();
+        deleted += snapshot.docs.length;
+
+        // Re-query for next batch
+        snapshot = await this.db.collection(collectionName).limit(500).get();
+      }
+
+      if (deleted > 0) {
+        logger.info(`Cleared ${deleted} documents from ${collectionName}`);
       }
     }
 
