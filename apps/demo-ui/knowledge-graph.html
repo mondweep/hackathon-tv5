@@ -106,6 +106,13 @@
                     📡 Feed Preview
                 </button>
                 <button
+                    @click="activeTab = 'search'"
+                    :class="activeTab === 'search' ? 'tab-active' : 'text-gray-400 hover:text-white'"
+                    class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
+                >
+                    🔍 Semantic Search
+                </button>
+                <button
                     @click="activeTab = 'ingest'"
                     :class="activeTab === 'ingest' ? 'tab-active' : 'text-gray-400 hover:text-white'"
                     class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
@@ -482,6 +489,156 @@
                 </div>
             </section>
 
+            <!-- SEMANTIC SEARCH TAB -->
+            <section x-show="activeTab === 'search'" class="fade-in">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-2">
+                        🔍 <span class="bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">Semantic Search</span>
+                    </h2>
+                    <p class="text-gray-400">Find movies using natural language powered by Vertex AI embeddings</p>
+                </div>
+
+                <!-- Search Box -->
+                <div class="bg-gray-800/50 rounded-xl p-6 mb-6">
+                    <div class="max-w-2xl mx-auto">
+                        <div class="relative">
+                            <input
+                                type="text"
+                                x-model="searchQuery"
+                                @keydown.enter="performSemanticSearch()"
+                                placeholder="Describe the kind of movie you're looking for..."
+                                class="w-full bg-gray-700 border border-gray-600 rounded-xl px-6 py-4 pr-32 text-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                            >
+                            <button
+                                @click="performSemanticSearch()"
+                                :disabled="searching || !searchQuery.trim()"
+                                class="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg font-medium transition-colors"
+                            >
+                                <span x-show="!searching">Search</span>
+                                <span x-show="searching">...</span>
+                            </button>
+                        </div>
+                        <div class="flex flex-wrap gap-2 mt-4 justify-center">
+                            <button @click="searchQuery = 'epic space adventure with aliens'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">epic space adventure</button>
+                            <button @click="searchQuery = 'romantic comedy in New York'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">romantic comedy NYC</button>
+                            <button @click="searchQuery = 'thriller about a serial killer'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">thriller serial killer</button>
+                            <button @click="searchQuery = 'animated movie for kids about animals'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">animated kids animals</button>
+                            <button @click="searchQuery = 'mind-bending sci-fi about time travel'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">time travel sci-fi</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Info -->
+                <div class="bg-gray-800/30 border border-gray-700 rounded-xl p-4 mb-6">
+                    <div class="flex items-start space-x-3">
+                        <div class="text-2xl">💡</div>
+                        <div>
+                            <h4 class="font-medium text-purple-400">How Semantic Search Works</h4>
+                            <p class="text-sm text-gray-400 mt-1">
+                                Unlike keyword search, semantic search understands the <strong>meaning</strong> of your query.
+                                Your query and movie descriptions are converted to 768-dimensional vectors using Vertex AI embeddings,
+                                then matched by cosine similarity. This finds movies that are conceptually related, even without exact word matches.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Results -->
+                <template x-if="searchResults.length > 0">
+                    <div>
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-bold">
+                                Found <span class="text-purple-400" x-text="searchResults.length"></span> matches
+                            </h3>
+                            <span class="text-sm text-gray-400" x-text="'Search took ' + searchDuration + 'ms'"></span>
+                        </div>
+                        <div class="space-y-4">
+                            <template x-for="(result, index) in searchResults" :key="result.movie.id">
+                                <div
+                                    @click="selectMovie(result.movie)"
+                                    class="bg-gray-800/50 rounded-xl p-4 cursor-pointer node-card flex gap-4"
+                                >
+                                    <!-- Rank Badge -->
+                                    <div class="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold"
+                                         :class="index < 3 ? 'bg-purple-600' : 'bg-gray-700'"
+                                         x-text="'#' + (index + 1)">
+                                    </div>
+
+                                    <!-- Poster -->
+                                    <div class="flex-shrink-0 w-20 h-30 bg-gray-700 rounded-lg overflow-hidden">
+                                        <template x-if="result.movie.posterPath">
+                                            <img
+                                                :src="'https://image.tmdb.org/t/p/w154' + result.movie.posterPath"
+                                                :alt="result.movie.title"
+                                                class="w-full h-full object-cover"
+                                                loading="lazy"
+                                            >
+                                        </template>
+                                        <template x-if="!result.movie.posterPath">
+                                            <div class="w-full h-full flex items-center justify-center text-2xl">🎬</div>
+                                        </template>
+                                    </div>
+
+                                    <!-- Info -->
+                                    <div class="flex-grow min-w-0">
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div>
+                                                <h4 class="font-bold text-lg truncate" x-text="result.movie.title"></h4>
+                                                <div class="flex flex-wrap gap-2 mt-1">
+                                                    <span class="px-2 py-0.5 bg-orange-600/50 rounded text-xs">
+                                                        ⭐ <span x-text="result.movie.voteAverage?.toFixed(1)"></span>
+                                                    </span>
+                                                    <span class="px-2 py-0.5 bg-gray-700 rounded text-xs" x-text="result.movie.year"></span>
+                                                </div>
+                                            </div>
+                                            <div class="flex-shrink-0 text-right">
+                                                <div class="text-2xl font-bold text-purple-400" x-text="(result.similarity * 100).toFixed(1) + '%'"></div>
+                                                <div class="text-xs text-gray-400">similarity</div>
+                                            </div>
+                                        </div>
+                                        <p class="text-sm text-gray-400 mt-2 line-clamp-2" x-text="result.movie.overview"></p>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Empty State (No Results) -->
+                <template x-if="searchPerformed && searchResults.length === 0 && !searching">
+                    <div class="text-center py-16">
+                        <div class="text-6xl mb-4">🔎</div>
+                        <h3 class="text-xl font-bold mb-2">No Matches Found</h3>
+                        <p class="text-gray-400 mb-4">Try a different query or check if movies have been ingested with embeddings</p>
+                    </div>
+                </template>
+
+                <!-- Initial State -->
+                <template x-if="!searchPerformed && searchResults.length === 0">
+                    <div class="text-center py-16">
+                        <div class="text-6xl mb-4">🧠</div>
+                        <h3 class="text-xl font-bold mb-2">AI-Powered Movie Discovery</h3>
+                        <p class="text-gray-400 mb-4">Enter a natural language description to find semantically similar movies</p>
+                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+                            <span class="px-3 py-1 bg-gray-800 rounded-full">Vertex AI</span>
+                            <span>×</span>
+                            <span class="px-3 py-1 bg-gray-800 rounded-full">768-dim embeddings</span>
+                            <span>×</span>
+                            <span class="px-3 py-1 bg-gray-800 rounded-full">Cosine Similarity</span>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Loading State -->
+                <template x-if="searching">
+                    <div class="text-center py-16">
+                        <div class="text-6xl mb-4 animate-pulse">🔮</div>
+                        <h3 class="text-xl font-bold mb-2">Searching...</h3>
+                        <p class="text-gray-400">Generating query embedding and finding similar movies</p>
+                    </div>
+                </template>
+            </section>
+
             <!-- INGEST TAB -->
             <section x-show="activeTab === 'ingest'" class="fade-in">
                 <div class="text-center mb-8">
@@ -527,9 +684,31 @@
                                 <option value="100">100 (Quick Test)</option>
                                 <option value="1000">1,000 (Sample)</option>
                                 <option value="10000">10,000 (Medium)</option>
-                                <option value="100000">100,000 (Large)</option>
+                                <option value="100000">100,000 (Large - Recommended)</option>
                                 <option value="0">All (1.33M - 6-8 hours)</option>
                             </select>
+                        </div>
+                        <div>
+                            <label class="flex items-center space-x-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    x-model="generateEmbeddings"
+                                    class="w-5 h-5 bg-gray-700 border-gray-600 rounded focus:ring-purple-500 focus:ring-2"
+                                >
+                                <div>
+                                    <span class="font-medium">Generate Vertex AI Embeddings</span>
+                                    <p class="text-sm text-gray-400">Enable semantic search (768-dim vectors)</p>
+                                </div>
+                            </label>
+                        </div>
+                        <div x-show="generateEmbeddings" class="p-4 bg-purple-600/20 border border-purple-500/30 rounded-lg">
+                            <div class="flex items-start space-x-3">
+                                <div class="text-xl">🧠</div>
+                                <div class="text-sm">
+                                    <p class="font-medium text-purple-300">Embeddings will be generated using Vertex AI</p>
+                                    <p class="text-gray-400 mt-1">This adds ~2 seconds per batch of 5 movies. For 100k movies, expect ~5-6 hours total processing time.</p>
+                                </div>
+                            </div>
                         </div>
                         <div class="flex gap-4">
                             <button
@@ -554,24 +733,39 @@
                 <template x-if="ingestionResult">
                     <div class="bg-gray-800/50 rounded-xl p-6">
                         <h3 class="text-xl font-bold mb-4">Ingestion Result</h3>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
                             <div class="p-4 bg-green-600/20 rounded-lg">
-                                <div class="text-2xl font-bold text-green-400" x-text="ingestionResult.stats?.stored || 0"></div>
+                                <div class="text-2xl font-bold text-green-400" x-text="(ingestionResult.stats?.moviesStored || ingestionResult.stats?.stored || 0).toLocaleString()"></div>
                                 <div class="text-sm text-gray-400">Movies Stored</div>
                             </div>
+                            <div class="p-4 bg-purple-600/20 rounded-lg">
+                                <div class="text-2xl font-bold text-purple-400" x-text="(ingestionResult.stats?.embeddingsGenerated || 0).toLocaleString()"></div>
+                                <div class="text-sm text-gray-400">Embeddings</div>
+                            </div>
                             <div class="p-4 bg-red-600/20 rounded-lg">
-                                <div class="text-2xl font-bold text-red-400" x-text="ingestionResult.stats?.failed || 0"></div>
-                                <div class="text-sm text-gray-400">Failed</div>
+                                <div class="text-2xl font-bold text-red-400" x-text="ingestionResult.stats?.errors || ingestionResult.stats?.failed || 0"></div>
+                                <div class="text-sm text-gray-400">Errors</div>
                             </div>
                             <div class="p-4 bg-blue-600/20 rounded-lg">
                                 <div class="text-2xl font-bold text-blue-400" x-text="((ingestionResult.stats?.durationMs || 0) / 1000).toFixed(1) + 's'"></div>
                                 <div class="text-sm text-gray-400">Duration</div>
                             </div>
-                            <div class="p-4 bg-purple-600/20 rounded-lg">
-                                <div class="text-2xl font-bold text-purple-400" x-text="ingestionResult.stats?.cacheStats?.genres || 0"></div>
-                                <div class="text-sm text-gray-400">Genres Found</div>
+                            <div class="p-4 bg-cyan-600/20 rounded-lg">
+                                <div class="text-2xl font-bold text-cyan-400" x-text="ingestionResult.stats?.genresFound || ingestionResult.stats?.cacheStats?.genres || 0"></div>
+                                <div class="text-sm text-gray-400">Genres</div>
                             </div>
                         </div>
+                        <template x-if="ingestionResult.stats?.embeddingsGenerated > 0">
+                            <div class="mt-4 p-4 bg-purple-600/20 border border-purple-500/30 rounded-lg">
+                                <div class="flex items-center space-x-3">
+                                    <div class="text-xl">✅</div>
+                                    <div>
+                                        <p class="font-medium text-purple-300">Semantic Search Ready!</p>
+                                        <p class="text-sm text-gray-400">You can now use the Semantic Search tab to find movies by description</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </template>
             </section>
@@ -715,8 +909,16 @@
                 feedPlatform: 'netflix',
                 feedPreview: '',
 
+                // Semantic Search
+                searchQuery: '',
+                searchResults: [],
+                searching: false,
+                searchPerformed: false,
+                searchDuration: 0,
+
                 // Ingestion
                 ingestLimit: 100,
+                generateEmbeddings: true,
                 ingesting: false,
                 ingestionResult: null,
 
@@ -801,6 +1003,40 @@
                     this.movieFilters.offset = 0;
                     this.activeTab = 'browse';
                     this.loadMovies();
+                },
+
+                // Semantic Search
+                async performSemanticSearch() {
+                    if (!this.searchQuery.trim()) return;
+
+                    this.searching = true;
+                    this.searchPerformed = true;
+                    this.searchResults = [];
+                    const startTime = Date.now();
+
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/knowledge-graph/search/semantic`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                query: this.searchQuery,
+                                limit: 20,
+                                minSimilarity: 0.3
+                            })
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.searchResults = data.results || [];
+                            this.searchDuration = Date.now() - startTime;
+                        } else {
+                            console.error('Semantic search failed:', await response.text());
+                        }
+                    } catch (error) {
+                        console.error('Semantic search error:', error);
+                    } finally {
+                        this.searching = false;
+                    }
                 },
 
                 // Feed Preview
@@ -910,7 +1146,10 @@
                         const response = await fetch(`${API_BASE}/api/v1/knowledge-graph/ingest/start`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ limit: parseInt(this.ingestLimit) || 100 })
+                            body: JSON.stringify({
+                                limit: parseInt(this.ingestLimit) || 100,
+                                generateEmbeddings: this.generateEmbeddings
+                            })
                         });
                         if (response.ok) {
                             this.ingestionResult = await response.json();

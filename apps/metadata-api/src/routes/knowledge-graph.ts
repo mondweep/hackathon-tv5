@@ -1,12 +1,15 @@
 /**
  * Knowledge Graph API Routes
  *
- * REST API endpoints for querying and exploring the knowledge graph.
- * Supports movie browsing, genre filtering, and relationship traversal.
+ * REST API endpoints for:
+ * - Movie browsing and querying
+ * - Semantic search with embeddings
+ * - Platform feed generation (Netflix/Amazon/FAST)
+ * - Data ingestion with embeddings
  */
 
 import { Router, Request, Response } from 'express';
-import { query, param, validationResult } from 'express-validator';
+import { query, param, body, validationResult } from 'express-validator';
 import { logger } from '../utils/logger';
 import {
   getStore,
@@ -14,11 +17,21 @@ import {
   getGCSReader,
   GraphQuery,
   MovieNode,
-  GenreNode,
 } from '../knowledge-graph';
+import { createIngestionPipeline } from '../knowledge-graph/ingestion-pipeline';
 import { getEmbeddingsInstance } from '../vertex-ai/embeddings';
+import { NetflixIMFConnector } from '../connectors/netflix-imf';
+import { AmazonMECConnector } from '../connectors/amazon-mec';
+import { FASTMRSSConnector } from '../connectors/fast-mrss';
+import { Platform } from '../connectors/types';
+import { MediaMetadata } from '../types';
 
 const router = Router();
+
+// Connector instances
+const netflixConnector = new NetflixIMFConnector();
+const amazonConnector = new AmazonMECConnector();
+const fastConnector = new FASTMRSSConnector(Platform.FAST_PLUTO);
 
 /**
  * Validation error handler
@@ -30,6 +43,46 @@ function handleValidationErrors(req: Request, res: Response): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Convert MovieNode to MediaMetadata for connectors
+ */
+function movieToMediaMetadata(movie: MovieNode): MediaMetadata {
+  return {
+    id: movie.id,
+    title: movie.title,
+    type: 'movie',
+    synopsis: movie.overview,
+    genres: [], // Would need to query edges
+    language: 'en',
+    rating: movie.adult ? 'R' : 'PG-13',
+    duration: movie.runtime,
+    releaseDate: movie.releaseDate ? new Date(movie.releaseDate) : undefined,
+    resolution: '4K',
+    createdAt: new Date(movie.createdAt),
+    updatedAt: new Date(movie.updatedAt),
+  };
+}
+
+/**
+ * Calculate cosine similarity between two vectors
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  return denominator === 0 ? 0 : dotProduct / denominator;
 }
 
 // ============================================
@@ -183,15 +236,10 @@ router.get(
 // Genre Endpoints
 // ============================================
 
-/**
- * GET /api/v1/knowledge-graph/genres
- * Get all genres
- */
 router.get('/genres', async (req: Request, res: Response) => {
   try {
     const store = getStore();
     const genres = await store.getGenres();
-
     res.json({ genres });
   } catch (error) {
     logger.error('Failed to get genres', { error });
@@ -199,10 +247,6 @@ router.get('/genres', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/v1/knowledge-graph/genres/:id
- * Get genre by ID with movies
- */
 router.get(
   '/genres/:id',
   [
@@ -235,15 +279,10 @@ router.get(
 // Reference Data Endpoints
 // ============================================
 
-/**
- * GET /api/v1/knowledge-graph/countries
- * Get all countries
- */
 router.get('/countries', async (req: Request, res: Response) => {
   try {
     const store = getStore();
     const countries = await store.getCountries();
-
     res.json({ countries });
   } catch (error) {
     logger.error('Failed to get countries', { error });
@@ -251,15 +290,10 @@ router.get('/countries', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/v1/knowledge-graph/languages
- * Get all languages
- */
 router.get('/languages', async (req: Request, res: Response) => {
   try {
     const store = getStore();
     const languages = await store.getLanguages();
-
     res.json({ languages });
   } catch (error) {
     logger.error('Failed to get languages', { error });
@@ -271,15 +305,10 @@ router.get('/languages', async (req: Request, res: Response) => {
 // Statistics Endpoint
 // ============================================
 
-/**
- * GET /api/v1/knowledge-graph/stats
- * Get knowledge graph statistics
- */
 router.get('/stats', async (req: Request, res: Response) => {
   try {
     const store = getStore();
     const stats = await store.getStats();
-
     res.json({ stats });
   } catch (error) {
     logger.error('Failed to get stats', { error });
@@ -293,38 +322,251 @@ router.get('/stats', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/knowledge-graph/search/semantic
- * Semantic search using embeddings
+ * Semantic search using Vertex AI embeddings
  */
-router.post(
-  '/search/semantic',
-  async (req: Request, res: Response) => {
-    try {
-      const { query: searchQuery, limit = 10 } = req.body;
+router.post('/search/semantic', async (req: Request, res: Response) => {
+  try {
+    const { query: searchQuery, limit = 20 } = req.body;
 
-      if (!searchQuery || typeof searchQuery !== 'string') {
-        return res.status(400).json({ error: 'Query is required' });
-      }
-
-      // Generate embedding for search query
-      const embeddings = getEmbeddingsInstance();
-      const queryEmbedding = await embeddings.generateEmbedding(searchQuery);
-
-      // For now, return placeholder - will integrate with vector search
-      res.json({
-        query: searchQuery,
-        embedding: {
-          dimensions: queryEmbedding.length,
-          preview: queryEmbedding.slice(0, 5),
-        },
-        message: 'Semantic search will be integrated with vector index',
-        results: [],
-      });
-    } catch (error) {
-      logger.error('Semantic search failed', { error });
-      res.status(500).json({ error: 'Semantic search failed' });
+    if (!searchQuery || typeof searchQuery !== 'string') {
+      return res.status(400).json({ error: 'Query is required' });
     }
+
+    const startTime = Date.now();
+
+    // Generate embedding for search query
+    const embeddings = getEmbeddingsInstance();
+    const queryEmbedding = await embeddings.generateEmbedding(searchQuery);
+
+    // Get movies with embeddings from store
+    const store = getStore();
+    const { nodes: allMovies } = await store.queryMovies({ limit: 1000 });
+
+    // Filter movies with embeddings and calculate similarity
+    const moviesWithEmbeddings = allMovies.filter(
+      (m: MovieNode) => m.embedding && m.embedding.length > 0
+    );
+
+    const scoredMovies = moviesWithEmbeddings
+      .map((movie: MovieNode) => ({
+        movie,
+        similarity: cosineSimilarity(queryEmbedding, movie.embedding!),
+      }))
+      .filter(item => item.similarity > 0.3) // Minimum threshold
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+
+    const searchDuration = Date.now() - startTime;
+
+    res.json({
+      query: searchQuery,
+      results: scoredMovies.map(item => ({
+        ...item.movie,
+        similarity: item.similarity,
+      })),
+      stats: {
+        totalWithEmbeddings: moviesWithEmbeddings.length,
+        resultsFound: scoredMovies.length,
+        searchDurationMs: searchDuration,
+      },
+    });
+  } catch (error) {
+    logger.error('Semantic search failed', { error });
+    res.status(500).json({ error: 'Semantic search failed' });
   }
-);
+});
+
+// ============================================
+// Feed Generation Endpoints
+// ============================================
+
+/**
+ * POST /api/v1/knowledge-graph/feeds/netflix/:movieId
+ * Generate Netflix IMF package for a movie
+ */
+router.post('/feeds/netflix/:movieId', async (req: Request, res: Response) => {
+  try {
+    const store = getStore();
+    const movie = await store.getMovie(req.params.movieId);
+
+    if (!movie) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+
+    const mediaMetadata = movieToMediaMetadata(movie);
+
+    // Validate and generate
+    const validation = netflixConnector.validate(mediaMetadata);
+    const imfPackage = netflixConnector.generatePackage(mediaMetadata);
+
+    res.json({
+      movie: {
+        id: movie.id,
+        title: movie.title,
+      },
+      validation,
+      package: imfPackage,
+    });
+  } catch (error) {
+    logger.error('Netflix feed generation failed', { error, movieId: req.params.movieId });
+    res.status(500).json({ error: 'Feed generation failed' });
+  }
+});
+
+/**
+ * POST /api/v1/knowledge-graph/feeds/amazon/:movieId
+ * Generate Amazon MEC feed for a movie
+ */
+router.post('/feeds/amazon/:movieId', async (req: Request, res: Response) => {
+  try {
+    const store = getStore();
+    const movie = await store.getMovie(req.params.movieId);
+
+    if (!movie) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+
+    const mediaMetadata = movieToMediaMetadata(movie);
+
+    // Validate
+    const validation = await amazonConnector.validate(mediaMetadata);
+
+    // Generate feed (may throw if validation fails)
+    let mecFeed = null;
+    let mecXml = null;
+    try {
+      mecFeed = await amazonConnector.generateFeed(mediaMetadata);
+      mecXml = amazonConnector.exportFeed(mecFeed);
+    } catch (e) {
+      // Feed generation failed due to validation
+    }
+
+    res.json({
+      movie: {
+        id: movie.id,
+        title: movie.title,
+      },
+      validation,
+      feed: mecFeed,
+      xml: mecXml,
+    });
+  } catch (error) {
+    logger.error('Amazon feed generation failed', { error, movieId: req.params.movieId });
+    res.status(500).json({ error: 'Feed generation failed' });
+  }
+});
+
+/**
+ * POST /api/v1/knowledge-graph/feeds/fast/:movieId
+ * Generate FAST MRSS feed for a movie
+ */
+router.post('/feeds/fast/:movieId', async (req: Request, res: Response) => {
+  try {
+    const { platform = 'pluto' } = req.body;
+    const store = getStore();
+    const movie = await store.getMovie(req.params.movieId);
+
+    if (!movie) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+
+    const mediaMetadata = movieToMediaMetadata(movie);
+
+    // Get the right connector for the platform
+    const platformMap: Record<string, Platform> = {
+      pluto: Platform.FAST_PLUTO,
+      tubi: Platform.FAST_TUBI,
+      roku: Platform.FAST_ROKU,
+      samsung: Platform.FAST_SAMSUNG,
+    };
+
+    const targetPlatform = platformMap[platform] || Platform.FAST_PLUTO;
+    const connector = new FASTMRSSConnector(targetPlatform);
+
+    // Validate and generate
+    const validation = await connector.validate(mediaMetadata);
+    const mrssPackage = await connector.generate(mediaMetadata);
+    const mrssXml = await connector.serialize(mrssPackage, 'xml');
+
+    res.json({
+      movie: {
+        id: movie.id,
+        title: movie.title,
+      },
+      platform: targetPlatform,
+      validation,
+      package: mrssPackage,
+      xml: mrssXml,
+    });
+  } catch (error) {
+    logger.error('FAST feed generation failed', { error, movieId: req.params.movieId });
+    res.status(500).json({ error: 'Feed generation failed' });
+  }
+});
+
+/**
+ * POST /api/v1/knowledge-graph/feeds/batch
+ * Generate feeds for multiple movies (for preview)
+ */
+router.post('/feeds/batch', async (req: Request, res: Response) => {
+  try {
+    const { platform, genreId, limit = 10 } = req.body;
+
+    if (!platform || !['netflix', 'amazon', 'fast'].includes(platform)) {
+      return res.status(400).json({ error: 'Valid platform required (netflix, amazon, fast)' });
+    }
+
+    const store = getStore();
+    let movies: MovieNode[];
+
+    if (genreId) {
+      movies = await store.getMoviesByGenre(genreId, limit);
+    } else {
+      const result = await store.queryMovies({ limit, sortBy: 'popularity', sortOrder: 'desc' });
+      movies = result.nodes as MovieNode[];
+    }
+
+    const feeds = await Promise.all(
+      movies.map(async (movie) => {
+        const metadata = movieToMediaMetadata(movie);
+        let validation;
+        let feedPreview;
+
+        try {
+          if (platform === 'netflix') {
+            validation = netflixConnector.validate(metadata);
+          } else if (platform === 'amazon') {
+            validation = await amazonConnector.validate(metadata);
+          } else {
+            validation = await fastConnector.validate(metadata);
+          }
+        } catch {
+          validation = { valid: false, errors: [{ message: 'Validation failed' }] };
+        }
+
+        return {
+          movieId: movie.id,
+          title: movie.title,
+          posterPath: movie.posterPath,
+          validation: {
+            valid: validation.valid,
+            errorCount: validation.errors?.length || 0,
+            warningCount: validation.warnings?.length || 0,
+          },
+        };
+      })
+    );
+
+    res.json({
+      platform,
+      totalMovies: movies.length,
+      feeds,
+    });
+  } catch (error) {
+    logger.error('Batch feed generation failed', { error });
+    res.status(500).json({ error: 'Batch feed generation failed' });
+  }
+});
 
 // ============================================
 // Ingestion Endpoints
@@ -332,54 +574,60 @@ router.post(
 
 /**
  * POST /api/v1/knowledge-graph/ingest/start
- * Start dataset ingestion (for small batches or testing)
+ * Start dataset ingestion with embeddings
  */
-router.post(
-  '/ingest/start',
-  async (req: Request, res: Response) => {
-    try {
-      const { limit = 100 } = req.body;
+router.post('/ingest/start', async (req: Request, res: Response) => {
+  try {
+    const { limit = 100, generateEmbeddings = false } = req.body;
 
-      const gcsReader = getGCSReader();
-      const processor = getProcessor();
-      const store = getStore();
+    logger.info('Starting ingestion', { limit, generateEmbeddings });
 
-      let processed = 0;
-      let stored = 0;
-      let failed = 0;
+    const pipeline = createIngestionPipeline({
+      limit: Math.min(limit, 100000), // Cap at 100k
+      generateEmbeddings,
+      batchSize: 100,
+      embeddingBatchSize: 5,
+      sortByPopularity: true,
+      minVoteCount: limit > 1000 ? 10 : 0, // Only filter for larger ingestions
+    });
 
-      const startTime = Date.now();
+    const result = await pipeline.run();
 
-      // Process in batches
-      for await (const batch of gcsReader.streamBatches(50, undefined, limit)) {
-        const { movies, stats } = processor.processBatch(batch);
-        processed += stats.totalRows || 0;
-        failed += stats.failedRows || 0;
-
-        if (movies.length > 0) {
-          const storeResult = await store.storeProcessedMoviesBatch(movies);
-          stored += storeResult.stored;
-        }
-      }
-
-      const duration = Date.now() - startTime;
-
-      res.json({
-        success: true,
-        stats: {
-          processed,
-          stored,
-          failed,
-          durationMs: duration,
-          cacheStats: processor.getCacheStats(),
-        },
-      });
-    } catch (error) {
-      logger.error('Ingestion failed', { error });
-      res.status(500).json({ error: 'Ingestion failed' });
-    }
+    res.json({
+      success: result.success,
+      stats: result.stats,
+      error: result.error,
+    });
+  } catch (error) {
+    logger.error('Ingestion failed', { error });
+    res.status(500).json({ error: 'Ingestion failed' });
   }
-);
+});
+
+/**
+ * POST /api/v1/knowledge-graph/ingest/quick-test
+ * Quick test ingestion (100 movies, no embeddings)
+ */
+router.post('/ingest/quick-test', async (req: Request, res: Response) => {
+  try {
+    const pipeline = createIngestionPipeline({
+      limit: 100,
+      generateEmbeddings: false,
+      minVoteCount: 0,
+    });
+
+    const result = await pipeline.runQuickTest();
+
+    res.json({
+      success: result.success,
+      stats: result.stats,
+      error: result.error,
+    });
+  } catch (error) {
+    logger.error('Quick test failed', { error });
+    res.status(500).json({ error: 'Quick test failed' });
+  }
+});
 
 /**
  * GET /api/v1/knowledge-graph/ingest/status
@@ -391,10 +639,23 @@ router.get('/ingest/status', async (req: Request, res: Response) => {
     const store = getStore();
     const stats = await store.getStats();
 
+    // Check if embeddings exist
+    const { nodes: sampleMovies } = await store.queryMovies({ limit: 10 });
+    const moviesWithEmbeddings = sampleMovies.filter(
+      (m: MovieNode) => m.embedding && m.embedding.length > 0
+    ).length;
+
     res.json({
-      status: stats.totalMovies > 0 ? 'in_progress' : 'not_started',
+      status: stats.totalMovies > 0 ? 'completed' : 'not_started',
       stats,
       cacheStats: processor.getCacheStats(),
+      embeddingStatus: {
+        sampleSize: sampleMovies.length,
+        withEmbeddings: moviesWithEmbeddings,
+        percentage: sampleMovies.length > 0
+          ? Math.round((moviesWithEmbeddings / sampleMovies.length) * 100)
+          : 0,
+      },
     });
   } catch (error) {
     logger.error('Failed to get ingestion status', { error });

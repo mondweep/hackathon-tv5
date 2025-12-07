@@ -20,3 +20,12 @@ export {
 
 // Store
 export { KnowledgeGraphStore, getStore, type StoreConfig } from './store';
+
+// Ingestion Pipeline
+export {
+  IngestionPipeline,
+  createIngestionPipeline,
+  type IngestionConfig,
+  type IngestionProgress,
+  type IngestionResult,
+} from './ingestion-pipeline';
