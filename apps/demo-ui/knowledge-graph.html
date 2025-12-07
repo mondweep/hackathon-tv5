@@ -718,7 +718,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="flex gap-4">
+                        <div class="flex flex-wrap gap-4">
                             <button
                                 @click="startIngestion()"
                                 :disabled="ingesting"
@@ -726,6 +726,15 @@
                             >
                                 <span x-show="!ingesting">🚀 Start Ingestion</span>
                                 <span x-show="ingesting">⏳ Processing...</span>
+                            </button>
+                            <button
+                                @click="validateForDistribution()"
+                                :disabled="ingesting || clearing || validating"
+                                class="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded-lg font-medium transition-colors"
+                                title="Validate movies for Netflix, Amazon, and FAST distribution"
+                            >
+                                <span x-show="!validating">✅ Validate for Distribution</span>
+                                <span x-show="validating">⏳ Validating...</span>
                             </button>
                             <button
                                 @click="clearAllData()"
@@ -1087,7 +1096,9 @@
                 generateEmbeddings: true,
                 ingesting: false,
                 clearing: false,
+                validating: false,
                 ingestionResult: null,
+                validationResult: null,
 
                 // Graph Visualization
                 graphSettings: {
@@ -1383,6 +1394,36 @@
                         alert('Failed to clear data: ' + error.message);
                     } finally {
                         this.clearing = false;
+                    }
+                },
+
+                async validateForDistribution() {
+                    if (this.stats.totalMovies === 0) {
+                        alert('No movies to validate. Please ingest some movies first.');
+                        return;
+                    }
+                    this.validating = true;
+                    this.validationResult = null;
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/knowledge-graph/validate/batch`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ limit: Math.min(this.stats.totalMovies, 1000) })
+                        });
+                        if (response.ok) {
+                            const result = await response.json();
+                            this.validationResult = result;
+                            alert(`Validation complete!\n\nValidated: ${result.stats.validated} movies\n\nPlatform Readiness:\n- Netflix IMF Ready: ${result.stats.netflixReady}\n- Amazon MEC Ready: ${result.stats.amazonReady}\n- FAST MRSS Ready: ${result.stats.fastReady}\n\nFailed: ${result.stats.failed}`);
+                            await this.refreshStats();
+                        } else {
+                            const error = await response.json();
+                            alert('Validation failed: ' + (error.details || error.error));
+                        }
+                    } catch (error) {
+                        console.error('Validation error:', error);
+                        alert('Validation failed: ' + error.message);
+                    } finally {
+                        this.validating = false;
                     }
                 },
 

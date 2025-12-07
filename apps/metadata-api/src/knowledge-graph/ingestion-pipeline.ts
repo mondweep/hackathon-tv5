@@ -14,6 +14,7 @@ import { KnowledgeGraphProcessor, getProcessor, ProcessedMovie } from './process
 import { KnowledgeGraphStore, getStore } from './store';
 import { VertexAIEmbeddings, getEmbeddingsInstance } from '../vertex-ai/embeddings';
 import { TMDBMovieRow } from './schema';
+import { quickValidateMovie, getDistributionStatus } from './platform-validator';
 
 /**
  * Ingestion configuration
@@ -52,6 +53,10 @@ export interface IngestionResult {
     companiesFound: number;
     countriesFound: number;
     languagesFound: number;
+    // Platform readiness counts
+    netflixReady: number;
+    amazonReady: number;
+    fastReady: number;
   };
   error?: string;
 }
@@ -100,6 +105,9 @@ export class IngestionPipeline {
     let moviesStored = 0;
     let embeddingsGenerated = 0;
     let errors = 0;
+    let netflixReady = 0;
+    let amazonReady = 0;
+    let fastReady = 0;
 
     try {
       logger.info('Starting ingestion pipeline', { config: this.config });
@@ -244,6 +252,37 @@ export class IngestionPipeline {
         logger.info(`Generated ${embeddingsGenerated} embeddings`);
       }
 
+      // Phase 3.5: Validate for platform distribution
+      logger.info('Validating movies for platform distribution...');
+      for (const processed of processedMovies) {
+        try {
+          const readiness = quickValidateMovie(processed.movie);
+
+          // Set platform readiness on the movie
+          (processed.movie as any).platformReadiness = {
+            netflix: readiness.netflix,
+            amazon: readiness.amazon,
+            fast: readiness.fast,
+            validatedAt: new Date().toISOString(),
+          };
+
+          // Set distribution status
+          processed.movie.distributionStatus = getDistributionStatus(readiness);
+
+          // Track counts
+          if (readiness.netflix) netflixReady++;
+          if (readiness.amazon) amazonReady++;
+          if (readiness.fast) fastReady++;
+        } catch (error) {
+          logger.error('Platform validation failed for movie', {
+            movieId: processed.movie.id,
+            error: error instanceof Error ? error.message : 'Unknown',
+          });
+          processed.movie.distributionStatus = 'failed';
+        }
+      }
+      logger.info(`Platform validation complete: Netflix=${netflixReady}, Amazon=${amazonReady}, FAST=${fastReady}`);
+
       // Phase 4: Store in Firestore
       this.reportProgress({
         phase: 'storing',
@@ -316,6 +355,9 @@ export class IngestionPipeline {
           companiesFound: cacheStats.companies,
           countriesFound: cacheStats.countries,
           languagesFound: cacheStats.languages,
+          netflixReady,
+          amazonReady,
+          fastReady,
         },
       };
     } catch (error) {
@@ -334,6 +376,9 @@ export class IngestionPipeline {
           companiesFound: 0,
           countriesFound: 0,
           languagesFound: 0,
+          netflixReady: 0,
+          amazonReady: 0,
+          fastReady: 0,
         },
         error: errorMessage,
       };

@@ -476,12 +476,14 @@ export class KnowledgeGraphStore {
       this.getCollectionCount(COLLECTIONS.EDGES),
     ]);
 
-    // Get distribution readiness counts
-    await this.db
-      .collection(COLLECTIONS.MOVIES)
-      .where('distributionStatus', '==', 'ready')
-      .limit(1)
-      .get();
+    // Get platform readiness counts
+    const [netflixReady, amazonReady, fastReady, pendingCount, failedCount] = await Promise.all([
+      this.getPlatformReadyCount('netflix'),
+      this.getPlatformReadyCount('amazon'),
+      this.getPlatformReadyCount('fast'),
+      this.getDistributionStatusCount('pending'),
+      this.getDistributionStatusCount('failed'),
+    ]);
 
     return {
       totalMovies: moviesCount,
@@ -491,13 +493,52 @@ export class KnowledgeGraphStore {
       totalLanguages: languagesCount,
       totalKeywords: keywordsCount,
       totalEdges: edgesCount,
-      readyForNetflix: 0, // Calculated from validation results
-      readyForAmazon: 0,
-      readyForFAST: 0,
-      pendingProcessing: moviesCount, // Initially all pending
-      failedValidation: 0,
+      readyForNetflix: netflixReady,
+      readyForAmazon: amazonReady,
+      readyForFAST: fastReady,
+      pendingProcessing: pendingCount,
+      failedValidation: failedCount,
       lastUpdated: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Get count of movies ready for a specific platform
+   */
+  private async getPlatformReadyCount(platform: 'netflix' | 'amazon' | 'fast'): Promise<number> {
+    try {
+      const snapshot = await this.db
+        .collection(COLLECTIONS.MOVIES)
+        .where(`platformReadiness.${platform}`, '==', true)
+        .count()
+        .get();
+      return snapshot.data().count;
+    } catch (error) {
+      // Field might not exist yet
+      logger.debug(`Platform readiness count for ${platform} failed`, {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return 0;
+    }
+  }
+
+  /**
+   * Get count of movies with a specific distribution status
+   */
+  private async getDistributionStatusCount(status: string): Promise<number> {
+    try {
+      const snapshot = await this.db
+        .collection(COLLECTIONS.MOVIES)
+        .where('distributionStatus', '==', status)
+        .count()
+        .get();
+      return snapshot.data().count;
+    } catch (error) {
+      logger.debug(`Distribution status count for ${status} failed`, {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return 0;
+    }
   }
 
   /**

@@ -17,6 +17,7 @@ import {
   GraphQuery,
   MovieNode,
 } from '../knowledge-graph';
+import { quickValidateMovie, getDistributionStatus } from '../knowledge-graph/platform-validator';
 import { createIngestionPipeline } from '../knowledge-graph/ingestion-pipeline';
 import { getGCSReader } from '../knowledge-graph/gcs-reader';
 import { getEmbeddingsInstance } from '../vertex-ai/embeddings';
@@ -1043,5 +1044,158 @@ router.delete('/data', async (_req: Request, res: Response): Promise<void> => {
     res.status(500).json({ error: 'Failed to clear data', details: errorMessage });
   }
 });
+
+// ============================================
+// Distribution Validation Endpoints
+// ============================================
+
+/**
+ * POST /api/v1/knowledge-graph/validate/batch
+ * Validate existing movies for platform distribution
+ */
+router.post('/validate/batch', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { limit = 100 } = req.body;
+    const startTime = Date.now();
+
+    logger.info('Starting batch validation', { limit });
+
+    const store = getStore();
+    const { getFirestore } = await import('../db/firestore');
+    const db = getFirestore();
+
+    // Get movies that haven't been validated yet (no platformReadiness field)
+    // or all movies if revalidate is requested
+    const { nodes: movies } = await store.queryMovies({
+      limit: Math.min(limit, 1000),
+      sortBy: 'popularity',
+      sortOrder: 'desc',
+    });
+
+    let validated = 0;
+    let netflixReady = 0;
+    let amazonReady = 0;
+    let fastReady = 0;
+    let failed = 0;
+
+    // Process in batches
+    const batchSize = 50;
+    for (let i = 0; i < movies.length; i += batchSize) {
+      const batch = movies.slice(i, i + batchSize) as MovieNode[];
+      const firestoreBatch = db.batch();
+
+      for (const movie of batch) {
+        try {
+          const readiness = quickValidateMovie(movie);
+
+          // Update movie with platform readiness
+          const movieRef = db.collection('kg_movies').doc(String(movie.id));
+          firestoreBatch.update(movieRef, {
+            platformReadiness: {
+              netflix: readiness.netflix,
+              amazon: readiness.amazon,
+              fast: readiness.fast,
+              validatedAt: new Date().toISOString(),
+            },
+            distributionStatus: getDistributionStatus(readiness),
+            updatedAt: new Date().toISOString(),
+          });
+
+          validated++;
+          if (readiness.netflix) netflixReady++;
+          if (readiness.amazon) amazonReady++;
+          if (readiness.fast) fastReady++;
+        } catch (error) {
+          logger.error('Validation failed for movie', {
+            movieId: movie.id,
+            error: error instanceof Error ? error.message : 'Unknown',
+          });
+          failed++;
+        }
+      }
+
+      // Commit batch
+      await firestoreBatch.commit();
+    }
+
+    const durationMs = Date.now() - startTime;
+
+    logger.info('Batch validation completed', {
+      validated,
+      netflixReady,
+      amazonReady,
+      fastReady,
+      failed,
+      durationMs,
+    });
+
+    res.json({
+      success: true,
+      stats: {
+        validated,
+        netflixReady,
+        amazonReady,
+        fastReady,
+        failed,
+        durationMs,
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Batch validation failed', { error: errorMessage });
+    res.status(500).json({ error: 'Batch validation failed', details: errorMessage });
+  }
+});
+
+/**
+ * POST /api/v1/knowledge-graph/validate/:movieId
+ * Validate a single movie for platform distribution
+ */
+router.post(
+  '/validate/:movieId',
+  [param('movieId').isString().notEmpty()],
+  async (req: Request, res: Response): Promise<void> => {
+    if (handleValidationErrors(req, res)) return;
+
+    try {
+      const store = getStore();
+      const movie = await store.getMovie(req.params.movieId);
+
+      if (!movie) {
+        res.status(404).json({ error: 'Movie not found' });
+        return;
+      }
+
+      const readiness = quickValidateMovie(movie);
+
+      // Update movie in Firestore
+      const { getFirestore } = await import('../db/firestore');
+      const db = getFirestore();
+      const movieRef = db.collection('kg_movies').doc(String(movie.id));
+
+      await movieRef.update({
+        platformReadiness: {
+          netflix: readiness.netflix,
+          amazon: readiness.amazon,
+          fast: readiness.fast,
+          validatedAt: new Date().toISOString(),
+        },
+        distributionStatus: getDistributionStatus(readiness),
+        updatedAt: new Date().toISOString(),
+      });
+
+      res.json({
+        movieId: movie.id,
+        title: movie.title,
+        platformReadiness: readiness,
+        distributionStatus: getDistributionStatus(readiness),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Movie validation failed', { error: errorMessage, movieId: req.params.movieId });
+      res.status(500).json({ error: 'Validation failed', details: errorMessage });
+    }
+  }
+);
 
 export default router;
