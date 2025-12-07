@@ -799,4 +799,43 @@ router.get('/ingest/status', async (_req: Request, res: Response): Promise<void>
   }
 });
 
+/**
+ * DELETE /api/v1/knowledge-graph/data
+ * Delete all knowledge graph data (for clean re-ingestion)
+ */
+router.delete('/data', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    logger.info('Clearing all knowledge graph data');
+    const store = getStore();
+
+    // Get stats before deletion
+    const statsBefore = await store.getStats();
+
+    // Clear all data
+    await store.clearAll();
+
+    // Clear processor caches
+    const processor = getProcessor();
+    processor.clearCaches();
+
+    res.json({
+      success: true,
+      message: 'All knowledge graph data cleared',
+      deletedCounts: {
+        movies: statsBefore.totalMovies,
+        genres: statsBefore.totalGenres,
+        companies: statsBefore.totalCompanies,
+        countries: statsBefore.totalCountries,
+        languages: statsBefore.totalLanguages,
+        keywords: statsBefore.totalKeywords,
+        edges: statsBefore.totalEdges,
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Failed to clear data', { error: errorMessage });
+    res.status(500).json({ error: 'Failed to clear data', details: errorMessage });
+  }
+});
+
 export default router;
