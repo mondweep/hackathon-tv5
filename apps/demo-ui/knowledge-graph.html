@@ -6,6 +6,7 @@
     <title>Nexus-UMMID | Knowledge Graph Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -118,6 +119,13 @@
                     class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
                 >
                     ⚙️ Ingest Data
+                </button>
+                <button
+                    @click="activeTab = 'visualize'; loadGraphData()"
+                    :class="activeTab === 'visualize' ? 'tab-active' : 'text-gray-400 hover:text-white'"
+                    class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
+                >
+                    🕸️ Visualize
                 </button>
             </div>
         </div>
@@ -777,6 +785,156 @@
                     </div>
                 </template>
             </section>
+
+            <!-- VISUALIZE TAB -->
+            <section x-show="activeTab === 'visualize'" class="fade-in">
+                <div class="text-center mb-6">
+                    <h2 class="text-3xl font-bold mb-2">
+                        🕸️ <span class="bg-gradient-to-r from-cyan-400 to-teal-500 bg-clip-text text-transparent">Knowledge Graph Visualization</span>
+                    </h2>
+                    <p class="text-gray-400">Explore relationships between movies, genres, companies, and more</p>
+                </div>
+
+                <!-- Graph Controls -->
+                <div class="bg-gray-800/50 rounded-xl p-4 mb-6">
+                    <div class="flex flex-wrap gap-4 items-center justify-between">
+                        <div class="flex flex-wrap gap-4 items-center">
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Movie Limit</label>
+                                <select
+                                    x-model="graphSettings.movieLimit"
+                                    @change="loadGraphData()"
+                                    class="bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm"
+                                >
+                                    <option value="10">10 movies</option>
+                                    <option value="25">25 movies</option>
+                                    <option value="50">50 movies</option>
+                                    <option value="100">100 movies</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Show Relationships</label>
+                                <div class="flex gap-2">
+                                    <label class="flex items-center gap-1 text-sm">
+                                        <input type="checkbox" x-model="graphSettings.showGenres" @change="renderGraph()" class="rounded bg-gray-700 border-gray-600">
+                                        <span class="text-yellow-400">Genres</span>
+                                    </label>
+                                    <label class="flex items-center gap-1 text-sm">
+                                        <input type="checkbox" x-model="graphSettings.showCompanies" @change="renderGraph()" class="rounded bg-gray-700 border-gray-600">
+                                        <span class="text-blue-400">Companies</span>
+                                    </label>
+                                    <label class="flex items-center gap-1 text-sm">
+                                        <input type="checkbox" x-model="graphSettings.showCountries" @change="renderGraph()" class="rounded bg-gray-700 border-gray-600">
+                                        <span class="text-green-400">Countries</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button
+                                @click="fitGraph()"
+                                class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
+                            >
+                                📐 Fit View
+                            </button>
+                            <button
+                                @click="loadGraphData()"
+                                :disabled="graphLoading"
+                                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 rounded-lg text-sm transition-colors"
+                            >
+                                <span x-show="!graphLoading">🔄 Refresh</span>
+                                <span x-show="graphLoading">Loading...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Graph Stats -->
+                <div class="grid grid-cols-4 gap-4 mb-6">
+                    <div class="bg-gray-800/50 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-bold text-purple-400" x-text="graphStats.movies">0</div>
+                        <div class="text-xs text-gray-400">Movies</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-bold text-yellow-400" x-text="graphStats.genres">0</div>
+                        <div class="text-xs text-gray-400">Genres</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-bold text-blue-400" x-text="graphStats.companies">0</div>
+                        <div class="text-xs text-gray-400">Companies</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-bold text-cyan-400" x-text="graphStats.edges">0</div>
+                        <div class="text-xs text-gray-400">Relationships</div>
+                    </div>
+                </div>
+
+                <!-- Legend -->
+                <div class="bg-gray-800/50 rounded-xl p-4 mb-6">
+                    <h4 class="text-sm font-medium mb-3">Node Types</h4>
+                    <div class="flex flex-wrap gap-4">
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-4 rounded-full bg-purple-500"></div>
+                            <span class="text-sm text-gray-300">Movie</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-4 rounded bg-yellow-500"></div>
+                            <span class="text-sm text-gray-300">Genre</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-4 rounded bg-blue-500"></div>
+                            <span class="text-sm text-gray-300">Production Company</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-4 rounded bg-green-500"></div>
+                            <span class="text-sm text-gray-300">Country</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Graph Container -->
+                <div class="bg-gray-900 rounded-xl overflow-hidden" style="height: 600px;">
+                    <div id="graph-container" class="w-full h-full"></div>
+                </div>
+
+                <!-- Selected Node Info -->
+                <template x-if="selectedGraphNode">
+                    <div class="bg-gray-800/50 rounded-xl p-4 mt-6">
+                        <h4 class="font-bold mb-2" x-text="selectedGraphNode.label"></h4>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <span class="text-gray-400">Type:</span>
+                                <span class="ml-2 capitalize" x-text="selectedGraphNode.nodeType"></span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">ID:</span>
+                                <span class="ml-2 font-mono" x-text="selectedGraphNode.id"></span>
+                            </div>
+                            <template x-if="selectedGraphNode.connectionCount">
+                                <div>
+                                    <span class="text-gray-400">Connections:</span>
+                                    <span class="ml-2" x-text="selectedGraphNode.connectionCount"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Empty State -->
+                <template x-if="!graphLoading && graphStats.movies === 0">
+                    <div class="text-center py-16">
+                        <div class="text-6xl mb-4">🕸️</div>
+                        <h3 class="text-xl font-bold mb-2">No Graph Data</h3>
+                        <p class="text-gray-400 mb-4">Ingest some movies first to visualize the knowledge graph</p>
+                        <button
+                            @click="activeTab = 'ingest'"
+                            class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                        >
+                            Go to Ingest
+                        </button>
+                    </div>
+                </template>
+            </section>
         </div>
     </main>
 
@@ -930,6 +1088,30 @@
                 ingesting: false,
                 clearing: false,
                 ingestionResult: null,
+
+                // Graph Visualization
+                graphSettings: {
+                    movieLimit: 25,
+                    showGenres: true,
+                    showCompanies: true,
+                    showCountries: false
+                },
+                graphStats: {
+                    movies: 0,
+                    genres: 0,
+                    companies: 0,
+                    edges: 0
+                },
+                graphData: {
+                    movies: [],
+                    genres: [],
+                    companies: [],
+                    countries: [],
+                    edges: []
+                },
+                graphNetwork: null,
+                selectedGraphNode: null,
+                graphLoading: false,
 
                 // Initialization
                 async init() {
@@ -1201,6 +1383,309 @@
                         alert('Failed to clear data: ' + error.message);
                     } finally {
                         this.clearing = false;
+                    }
+                },
+
+                // Graph Visualization Functions
+                async loadGraphData() {
+                    this.graphLoading = true;
+                    try {
+                        // Fetch movies with related entities
+                        const moviesResponse = await fetch(`${API_BASE}/api/v1/knowledge-graph/movies?limit=${this.graphSettings.movieLimit}&sortBy=popularity&sortOrder=desc`);
+                        const moviesData = await moviesResponse.json();
+                        this.graphData.movies = moviesData.movies || [];
+
+                        // Fetch genres
+                        const genresResponse = await fetch(`${API_BASE}/api/v1/knowledge-graph/genres`);
+                        const genresData = await genresResponse.json();
+                        this.graphData.genres = genresData.genres || [];
+
+                        // Fetch edges for these movies
+                        const movieIds = this.graphData.movies.map(m => m.id);
+                        if (movieIds.length > 0) {
+                            const edgesResponse = await fetch(`${API_BASE}/api/v1/knowledge-graph/edges?movieIds=${movieIds.join(',')}`);
+                            if (edgesResponse.ok) {
+                                const edgesData = await edgesResponse.json();
+                                this.graphData.edges = edgesData.edges || [];
+                            }
+                        }
+
+                        // Update stats
+                        this.graphStats.movies = this.graphData.movies.length;
+                        this.graphStats.genres = this.graphData.genres.length;
+
+                        // Render the graph
+                        this.renderGraph();
+                    } catch (error) {
+                        console.error('Failed to load graph data:', error);
+                    } finally {
+                        this.graphLoading = false;
+                    }
+                },
+
+                renderGraph() {
+                    const container = document.getElementById('graph-container');
+                    if (!container) return;
+
+                    const nodes = [];
+                    const edges = [];
+                    const addedNodes = new Set();
+                    const addedEdges = new Set();
+
+                    // Add movie nodes
+                    this.graphData.movies.forEach(movie => {
+                        const nodeId = `movie-${movie.id}`;
+                        if (!addedNodes.has(nodeId)) {
+                            nodes.push({
+                                id: nodeId,
+                                label: movie.title?.substring(0, 20) + (movie.title?.length > 20 ? '...' : ''),
+                                title: `${movie.title}\nYear: ${movie.year || 'N/A'}\nRating: ${movie.voteAverage?.toFixed(1) || 'N/A'}`,
+                                color: '#a855f7',
+                                shape: 'dot',
+                                size: 15 + (movie.popularity || 0) / 10,
+                                nodeType: 'movie',
+                                originalData: movie
+                            });
+                            addedNodes.add(nodeId);
+                        }
+                    });
+
+                    // Add genre nodes and edges
+                    if (this.graphSettings.showGenres) {
+                        // Track genre connections
+                        const genreMovieMap = new Map();
+
+                        this.graphData.edges.filter(e => e.type === 'HAS_GENRE').forEach(edge => {
+                            if (!genreMovieMap.has(edge.genreId)) {
+                                genreMovieMap.set(edge.genreId, []);
+                            }
+                            genreMovieMap.get(edge.genreId).push(edge.movieId);
+                        });
+
+                        this.graphData.genres.forEach(genre => {
+                            const genreNodeId = `genre-${genre.id}`;
+                            const movieConnections = genreMovieMap.get(genre.id) || [];
+
+                            // Only add genres that connect to our displayed movies
+                            const connectedToDisplayed = movieConnections.some(mid =>
+                                this.graphData.movies.some(m => String(m.id) === String(mid))
+                            );
+
+                            if (connectedToDisplayed && !addedNodes.has(genreNodeId)) {
+                                nodes.push({
+                                    id: genreNodeId,
+                                    label: genre.name,
+                                    title: `${genre.name}\nMovies: ${genre.movieCount || 0}`,
+                                    color: '#eab308',
+                                    shape: 'box',
+                                    size: 10 + Math.min(20, (genre.movieCount || 0) / 100),
+                                    nodeType: 'genre',
+                                    originalData: genre
+                                });
+                                addedNodes.add(genreNodeId);
+                            }
+
+                            // Add edges
+                            movieConnections.forEach(movieId => {
+                                const movieNodeId = `movie-${movieId}`;
+                                if (addedNodes.has(movieNodeId) && addedNodes.has(genreNodeId)) {
+                                    const edgeId = `${movieNodeId}-${genreNodeId}`;
+                                    if (!addedEdges.has(edgeId)) {
+                                        edges.push({
+                                            from: movieNodeId,
+                                            to: genreNodeId,
+                                            color: { color: '#eab30860', highlight: '#eab308' },
+                                            width: 1
+                                        });
+                                        addedEdges.add(edgeId);
+                                    }
+                                }
+                            });
+                        });
+                    }
+
+                    // Add production company nodes and edges
+                    if (this.graphSettings.showCompanies) {
+                        const companyMovieMap = new Map();
+                        const companyNames = new Map();
+
+                        this.graphData.edges.filter(e => e.type === 'PRODUCED_BY').forEach(edge => {
+                            if (!companyMovieMap.has(edge.companyId)) {
+                                companyMovieMap.set(edge.companyId, []);
+                            }
+                            companyMovieMap.get(edge.companyId).push(edge.movieId);
+                        });
+
+                        companyMovieMap.forEach((movieIds, companyId) => {
+                            const companyNodeId = `company-${companyId}`;
+                            const connectedMovies = movieIds.filter(mid =>
+                                this.graphData.movies.some(m => String(m.id) === String(mid))
+                            );
+
+                            if (connectedMovies.length > 0 && !addedNodes.has(companyNodeId)) {
+                                nodes.push({
+                                    id: companyNodeId,
+                                    label: `Co-${companyId.substring(0, 6)}`,
+                                    title: `Production Company\nID: ${companyId}\nConnected Movies: ${connectedMovies.length}`,
+                                    color: '#3b82f6',
+                                    shape: 'diamond',
+                                    size: 8 + connectedMovies.length * 2,
+                                    nodeType: 'company',
+                                    connectionCount: connectedMovies.length
+                                });
+                                addedNodes.add(companyNodeId);
+
+                                connectedMovies.forEach(movieId => {
+                                    const movieNodeId = `movie-${movieId}`;
+                                    const edgeId = `${movieNodeId}-${companyNodeId}`;
+                                    if (!addedEdges.has(edgeId)) {
+                                        edges.push({
+                                            from: movieNodeId,
+                                            to: companyNodeId,
+                                            color: { color: '#3b82f660', highlight: '#3b82f6' },
+                                            width: 1,
+                                            dashes: true
+                                        });
+                                        addedEdges.add(edgeId);
+                                    }
+                                });
+                            }
+                        });
+                    }
+
+                    // Add country nodes and edges
+                    if (this.graphSettings.showCountries) {
+                        const countryMovieMap = new Map();
+
+                        this.graphData.edges.filter(e => e.type === 'PRODUCED_IN').forEach(edge => {
+                            if (!countryMovieMap.has(edge.countryId)) {
+                                countryMovieMap.set(edge.countryId, []);
+                            }
+                            countryMovieMap.get(edge.countryId).push(edge.movieId);
+                        });
+
+                        countryMovieMap.forEach((movieIds, countryId) => {
+                            const countryNodeId = `country-${countryId}`;
+                            const connectedMovies = movieIds.filter(mid =>
+                                this.graphData.movies.some(m => String(m.id) === String(mid))
+                            );
+
+                            if (connectedMovies.length > 0 && !addedNodes.has(countryNodeId)) {
+                                nodes.push({
+                                    id: countryNodeId,
+                                    label: countryId,
+                                    title: `Country: ${countryId}\nMovies: ${connectedMovies.length}`,
+                                    color: '#22c55e',
+                                    shape: 'triangle',
+                                    size: 10 + connectedMovies.length * 2,
+                                    nodeType: 'country',
+                                    connectionCount: connectedMovies.length
+                                });
+                                addedNodes.add(countryNodeId);
+
+                                connectedMovies.forEach(movieId => {
+                                    const movieNodeId = `movie-${movieId}`;
+                                    const edgeId = `${movieNodeId}-${countryNodeId}`;
+                                    if (!addedEdges.has(edgeId)) {
+                                        edges.push({
+                                            from: movieNodeId,
+                                            to: countryNodeId,
+                                            color: { color: '#22c55e60', highlight: '#22c55e' },
+                                            width: 1
+                                        });
+                                        addedEdges.add(edgeId);
+                                    }
+                                });
+                            }
+                        });
+                    }
+
+                    // Update stats
+                    this.graphStats.companies = nodes.filter(n => n.nodeType === 'company').length;
+                    this.graphStats.edges = edges.length;
+
+                    // Create vis.js network
+                    const data = {
+                        nodes: new vis.DataSet(nodes),
+                        edges: new vis.DataSet(edges)
+                    };
+
+                    const options = {
+                        nodes: {
+                            font: {
+                                color: '#ffffff',
+                                size: 12
+                            },
+                            borderWidth: 2,
+                            shadow: true
+                        },
+                        edges: {
+                            smooth: {
+                                type: 'continuous'
+                            },
+                            shadow: true
+                        },
+                        physics: {
+                            enabled: true,
+                            barnesHut: {
+                                gravitationalConstant: -3000,
+                                centralGravity: 0.3,
+                                springLength: 150,
+                                springConstant: 0.04,
+                                damping: 0.09
+                            },
+                            stabilization: {
+                                iterations: 150
+                            }
+                        },
+                        interaction: {
+                            hover: true,
+                            tooltipDelay: 100,
+                            zoomView: true,
+                            dragView: true
+                        }
+                    };
+
+                    // Destroy previous network if exists
+                    if (this.graphNetwork) {
+                        this.graphNetwork.destroy();
+                    }
+
+                    this.graphNetwork = new vis.Network(container, data, options);
+
+                    // Handle node clicks
+                    this.graphNetwork.on('click', (params) => {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            const node = nodes.find(n => n.id === nodeId);
+                            if (node) {
+                                this.selectedGraphNode = {
+                                    id: node.id,
+                                    label: node.label,
+                                    nodeType: node.nodeType,
+                                    connectionCount: node.connectionCount || edges.filter(e => e.from === nodeId || e.to === nodeId).length,
+                                    data: node.originalData
+                                };
+
+                                // If it's a movie, open the detail modal
+                                if (node.nodeType === 'movie' && node.originalData) {
+                                    this.selectedMovie = node.originalData;
+                                }
+                            }
+                        } else {
+                            this.selectedGraphNode = null;
+                        }
+                    });
+                },
+
+                fitGraph() {
+                    if (this.graphNetwork) {
+                        this.graphNetwork.fit({
+                            animation: {
+                                duration: 500,
+                                easingFunction: 'easeInOutQuad'
+                            }
+                        });
                     }
                 }
             };

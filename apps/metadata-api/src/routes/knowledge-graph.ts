@@ -280,6 +280,59 @@ router.get(
 );
 
 // ============================================
+// Edges Endpoint (for Graph Visualization)
+// ============================================
+
+/**
+ * GET /api/v1/knowledge-graph/edges
+ * Get edges for specific movie IDs (for graph visualization)
+ */
+router.get(
+  '/edges',
+  [query('movieIds').optional().isString()],
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const store = getStore();
+      const movieIdsParam = req.query.movieIds as string;
+
+      if (!movieIdsParam) {
+        res.status(400).json({ error: 'movieIds parameter required' });
+        return;
+      }
+
+      const movieIds = movieIdsParam.split(',').map(id => id.trim()).filter(id => id);
+
+      if (movieIds.length === 0) {
+        res.json({ edges: [] });
+        return;
+      }
+
+      // Fetch edges for all requested movie IDs
+      const allEdges: any[] = [];
+      for (const movieId of movieIds) {
+        const edges = await store.getMovieEdges(movieId);
+        allEdges.push(...edges);
+      }
+
+      // Deduplicate edges by ID
+      const edgeMap = new Map();
+      allEdges.forEach(edge => {
+        edgeMap.set(edge.id, edge);
+      });
+
+      res.json({
+        edges: Array.from(edgeMap.values()),
+        movieCount: movieIds.length,
+        edgeCount: edgeMap.size,
+      });
+    } catch (error) {
+      logger.error('Failed to get edges', { error });
+      res.status(500).json({ error: 'Failed to get edges' });
+    }
+  }
+);
+
+// ============================================
 // Reference Data Endpoints
 // ============================================
 
