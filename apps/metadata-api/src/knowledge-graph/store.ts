@@ -503,9 +503,17 @@ export class KnowledgeGraphStore {
    * Get approximate collection count
    */
   private async getCollectionCount(collectionName: string): Promise<number> {
-    // Use aggregation query for efficiency
-    const snapshot = await this.db.collection(collectionName).count().get();
-    return snapshot.data().count;
+    try {
+      // Use aggregation query for efficiency
+      const snapshot = await this.db.collection(collectionName).count().get();
+      return snapshot.data().count;
+    } catch (error) {
+      // Collection might not exist yet - return 0
+      logger.debug(`Collection ${collectionName} count failed, returning 0`, {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return 0;
+    }
   }
 
   /**

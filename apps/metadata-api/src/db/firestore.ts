@@ -26,8 +26,10 @@ const FIRESTORE_CONFIG: Settings = {
   // Prefer HTTP/2 for better throughput
   preferRest: false,
 
-  // Credentials
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+  // Credentials - only use keyFilename if explicitly set (not in Cloud Run)
+  ...(process.env.GOOGLE_APPLICATION_CREDENTIALS && {
+    keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+  }),
 };
 
 /**

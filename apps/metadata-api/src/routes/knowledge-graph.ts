@@ -314,8 +314,29 @@ router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
     const stats = await store.getStats();
     res.json({ stats });
   } catch (error) {
-    logger.error('Failed to get stats', { error });
-    res.status(500).json({ error: 'Failed to get statistics' });
+    logger.error('Failed to get stats', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    // Return empty stats instead of 500 error - useful during initial setup
+    res.json({
+      stats: {
+        totalMovies: 0,
+        totalGenres: 0,
+        totalCompanies: 0,
+        totalCountries: 0,
+        totalLanguages: 0,
+        totalKeywords: 0,
+        totalEdges: 0,
+        readyForNetflix: 0,
+        readyForAmazon: 0,
+        readyForFAST: 0,
+        pendingProcessing: 0,
+        failedValidation: 0,
+        lastUpdated: new Date().toISOString(),
+      },
+      warning: 'Stats unavailable - database may be initializing',
+    });
   }
 });
 
