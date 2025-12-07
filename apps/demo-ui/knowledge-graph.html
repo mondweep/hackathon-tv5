@@ -553,9 +553,9 @@
                             <span class="text-sm text-gray-400" x-text="'Search took ' + searchDuration + 'ms'"></span>
                         </div>
                         <div class="space-y-4">
-                            <template x-for="(result, index) in searchResults" :key="result.movie.id">
+                            <template x-for="(result, index) in searchResults" :key="result.id + '-' + index">
                                 <div
-                                    @click="selectMovie(result.movie)"
+                                    @click="selectMovie(result)"
                                     class="bg-gray-800/50 rounded-xl p-4 cursor-pointer node-card flex gap-4"
                                 >
                                     <!-- Rank Badge -->
@@ -566,15 +566,15 @@
 
                                     <!-- Poster -->
                                     <div class="flex-shrink-0 w-20 h-30 bg-gray-700 rounded-lg overflow-hidden">
-                                        <template x-if="result.movie.posterPath">
+                                        <template x-if="result.posterPath">
                                             <img
-                                                :src="'https://image.tmdb.org/t/p/w154' + result.movie.posterPath"
-                                                :alt="result.movie.title"
+                                                :src="'https://image.tmdb.org/t/p/w154' + result.posterPath"
+                                                :alt="result.title"
                                                 class="w-full h-full object-cover"
                                                 loading="lazy"
                                             >
                                         </template>
-                                        <template x-if="!result.movie.posterPath">
+                                        <template x-if="!result.posterPath">
                                             <div class="w-full h-full flex items-center justify-center text-2xl">🎬</div>
                                         </template>
                                     </div>
@@ -583,12 +583,12 @@
                                     <div class="flex-grow min-w-0">
                                         <div class="flex items-start justify-between gap-4">
                                             <div>
-                                                <h4 class="font-bold text-lg truncate" x-text="result.movie.title"></h4>
+                                                <h4 class="font-bold text-lg truncate" x-text="result.title"></h4>
                                                 <div class="flex flex-wrap gap-2 mt-1">
                                                     <span class="px-2 py-0.5 bg-orange-600/50 rounded text-xs">
-                                                        ⭐ <span x-text="result.movie.voteAverage?.toFixed(1)"></span>
+                                                        ⭐ <span x-text="result.voteAverage?.toFixed(1)"></span>
                                                     </span>
-                                                    <span class="px-2 py-0.5 bg-gray-700 rounded text-xs" x-text="result.movie.year"></span>
+                                                    <span class="px-2 py-0.5 bg-gray-700 rounded text-xs" x-text="result.year"></span>
                                                 </div>
                                             </div>
                                             <div class="flex-shrink-0 text-right">
@@ -596,7 +596,7 @@
                                                 <div class="text-xs text-gray-400">similarity</div>
                                             </div>
                                         </div>
-                                        <p class="text-sm text-gray-400 mt-2 line-clamp-2" x-text="result.movie.overview"></p>
+                                        <p class="text-sm text-gray-400 mt-2 line-clamp-2" x-text="result.overview"></p>
                                     </div>
                                 </div>
                             </template>
