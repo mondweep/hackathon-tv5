@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en" x-data="knowledgeGraphApp()" x-init="init()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus-UMMID | Knowledge Graph Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+        .badge-netflix { background: #e50914; }
+        .badge-amazon { background: #00a8e1; }
+        .badge-fast { background: #10b981; }
+        .tab-active {
+            border-bottom: 2px solid #818cf8;
+            color: #818cf8;
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .node-card {
+            transition: all 0.3s ease;
+        }
+        .node-card:hover {
+            transform: scale(1.02);
+        }
+        pre.feed-preview {
+            max-height: 400px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Header -->
+    <header class="border-b border-gray-700/50 backdrop-blur-sm sticky top-0 z-50 bg-gray-900/80">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-green-500 to-cyan-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold">Knowledge Graph Explorer</h1>
+                        <p class="text-xs text-gray-400">TMDB → Distribution Pipeline</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="index.html" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-sm">
+                        ← Back to Discovery
+                    </a>
+                    <div class="flex items-center space-x-1">
+                        <span class="w-2 h-2 rounded-full animate-pulse" :class="stats.totalMovies > 0 ? 'bg-green-500' : 'bg-yellow-500'"></span>
+                        <span class="text-sm" :class="stats.totalMovies > 0 ? 'text-green-400' : 'text-yellow-400'" x-text="stats.totalMovies > 0 ? 'Ready' : 'Initializing'"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="border-b border-gray-800 bg-gray-900/50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex space-x-8 overflow-x-auto">
+                <button
+                    @click="activeTab = 'overview'"
+                    :class="activeTab === 'overview' ? 'tab-active' : 'text-gray-400 hover:text-white'"
+                    class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
+                >
+                    📊 Overview
+                </button>
+                <button
+                    @click="activeTab = 'browse'; loadMovies()"
+                    :class="activeTab === 'browse' ? 'tab-active' : 'text-gray-400 hover:text-white'"
+                    class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
+                >
+                    🎬 Browse Movies
+                </button>
+                <button
+                    @click="activeTab = 'genres'; loadGenres()"
+                    :class="activeTab === 'genres' ? 'tab-active' : 'text-gray-400 hover:text-white'"
+                    class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
+                >
+                    🏷️ Genres
+                </button>
+                <button
+                    @click="activeTab = 'feeds'"
+                    :class="activeTab === 'feeds' ? 'tab-active' : 'text-gray-400 hover:text-white'"
+                    class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
+                >
+                    📡 Feed Preview
+                </button>
+                <button
+                    @click="activeTab = 'search'"
+                    :class="activeTab === 'search' ? 'tab-active' : 'text-gray-400 hover:text-white'"
+                    class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
+                >
+                    🔍 Semantic Search
+                </button>
+                <button
+                    @click="activeTab = 'ingest'"
+                    :class="activeTab === 'ingest' ? 'tab-active' : 'text-gray-400 hover:text-white'"
+                    class="py-4 px-2 font-medium transition-colors whitespace-nowrap"
+                >
+                    ⚙️ Ingest Data
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="py-8 px-4">
+        <div class="max-w-7xl mx-auto">
+
+            <!-- OVERVIEW TAB -->
+            <section x-show="activeTab === 'overview'" class="fade-in">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl md:text-4xl font-bold mb-2">
+                        🕸️ <span class="bg-gradient-to-r from-green-400 to-cyan-500 bg-clip-text text-transparent">Knowledge Graph</span>
+                    </h2>
+                    <p class="text-gray-400">Transform TMDB metadata into distribution-ready feeds</p>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <div class="bg-gray-800/50 rounded-xl p-6 text-center">
+                        <div class="text-3xl font-bold text-white" x-text="stats.totalMovies.toLocaleString()">0</div>
+                        <div class="text-sm text-gray-400">Movies</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-xl p-6 text-center">
+                        <div class="text-3xl font-bold text-white" x-text="stats.totalGenres">0</div>
+                        <div class="text-sm text-gray-400">Genres</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-xl p-6 text-center">
+                        <div class="text-3xl font-bold text-white" x-text="stats.totalCountries">0</div>
+                        <div class="text-sm text-gray-400">Countries</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-xl p-6 text-center">
+                        <div class="text-3xl font-bold text-white" x-text="stats.totalEdges.toLocaleString()">0</div>
+                        <div class="text-sm text-gray-400">Relationships</div>
+                    </div>
+                </div>
+
+                <!-- Distribution Status -->
+                <div class="bg-gray-800/50 rounded-xl p-6 mb-8">
+                    <h3 class="text-xl font-bold mb-4">Distribution Readiness</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="flex items-center space-x-4 p-4 bg-gray-700/50 rounded-lg">
+                            <div class="w-12 h-12 badge-netflix rounded-lg flex items-center justify-center">
+                                <span class="text-xl">N</span>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold" x-text="stats.readyForNetflix">0</div>
+                                <div class="text-sm text-gray-400">Netflix IMF Ready</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-4 p-4 bg-gray-700/50 rounded-lg">
+                            <div class="w-12 h-12 badge-amazon rounded-lg flex items-center justify-center">
+                                <span class="text-xl">A</span>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold" x-text="stats.readyForAmazon">0</div>
+                                <div class="text-sm text-gray-400">Amazon MEC Ready</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-4 p-4 bg-gray-700/50 rounded-lg">
+                            <div class="w-12 h-12 badge-fast rounded-lg flex items-center justify-center">
+                                <span class="text-xl">F</span>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold" x-text="stats.readyForFAST">0</div>
+                                <div class="text-sm text-gray-400">FAST MRSS Ready</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Architecture Diagram -->
+                <div class="bg-gray-800/50 rounded-xl p-6">
+                    <h3 class="text-xl font-bold mb-4">Pipeline Architecture</h3>
+                    <div class="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-4 p-4">
+                        <div class="text-center p-4 bg-blue-600/20 rounded-lg border border-blue-500/30 w-full md:w-1/4">
+                            <div class="text-2xl mb-2">📥</div>
+                            <div class="font-bold">GCS Bucket</div>
+                            <div class="text-xs text-gray-400">TMDB Dataset (1.33M)</div>
+                        </div>
+                        <div class="text-2xl text-gray-500">→</div>
+                        <div class="text-center p-4 bg-purple-600/20 rounded-lg border border-purple-500/30 w-full md:w-1/4">
+                            <div class="text-2xl mb-2">🧠</div>
+                            <div class="font-bold">Knowledge Graph</div>
+                            <div class="text-xs text-gray-400">Hypergraph in Firestore</div>
+                        </div>
+                        <div class="text-2xl text-gray-500">→</div>
+                        <div class="text-center p-4 bg-green-600/20 rounded-lg border border-green-500/30 w-full md:w-1/4">
+                            <div class="text-2xl mb-2">🤖</div>
+                            <div class="font-bold">AI Enrichment</div>
+                            <div class="text-xs text-gray-400">Vertex AI Embeddings</div>
+                        </div>
+                        <div class="text-2xl text-gray-500">→</div>
+                        <div class="text-center p-4 bg-orange-600/20 rounded-lg border border-orange-500/30 w-full md:w-1/4">
+                            <div class="text-2xl mb-2">📡</div>
+                            <div class="font-bold">Distribution</div>
+                            <div class="text-xs text-gray-400">Netflix / Amazon / FAST</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- BROWSE MOVIES TAB -->
+            <section x-show="activeTab === 'browse'" class="fade-in">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <h2 class="text-2xl font-bold">Browse Movies</h2>
+                    <div class="flex flex-wrap gap-2">
+                        <select
+                            x-model="movieFilters.genre"
+                            @change="loadMovies()"
+                            class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm"
+                        >
+                            <option value="">All Genres</option>
+                            <template x-for="genre in genres" :key="genre.id">
+                                <option :value="genre.id" x-text="genre.name"></option>
+                            </template>
+                        </select>
+                        <select
+                            x-model="movieFilters.sortBy"
+                            @change="loadMovies()"
+                            class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm"
+                        >
+                            <option value="popularity">Popularity</option>
+                            <option value="voteAverage">Rating</option>
+                            <option value="year">Year</option>
+                            <option value="title">Title</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Movies Grid -->
+                <template x-if="!loading && movies.length > 0">
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        <template x-for="movie in movies" :key="movie.id">
+                            <div
+                                @click="selectMovie(movie)"
+                                class="bg-gray-800/50 rounded-xl overflow-hidden cursor-pointer node-card"
+                            >
+                                <div class="aspect-[2/3] relative overflow-hidden bg-gray-700">
+                                    <template x-if="movie.posterPath">
+                                        <img
+                                            :src="'https://image.tmdb.org/t/p/w342' + movie.posterPath"
+                                            :alt="movie.title"
+                                            class="w-full h-full object-cover"
+                                            loading="lazy"
+                                        >
+                                    </template>
+                                    <template x-if="!movie.posterPath">
+                                        <div class="w-full h-full flex items-center justify-center text-4xl">🎬</div>
+                                    </template>
+                                    <div class="absolute top-2 left-2">
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-orange-600">
+                                            ⭐ <span x-text="movie.voteAverage?.toFixed(1)"></span>
+                                        </span>
+                                    </div>
+                                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                                        <span class="text-xs text-gray-300" x-text="movie.year"></span>
+                                    </div>
+                                </div>
+                                <div class="p-3">
+                                    <h3 class="font-medium text-sm truncate" x-text="movie.title"></h3>
+                                    <p class="text-xs text-gray-400 truncate" x-text="movie.status"></p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Empty State -->
+                <template x-if="!loading && movies.length === 0">
+                    <div class="text-center py-16">
+                        <div class="text-6xl mb-4">📦</div>
+                        <h3 class="text-xl font-bold mb-2">No Movies Found</h3>
+                        <p class="text-gray-400 mb-4">Start by ingesting data from the GCS bucket</p>
+                        <button
+                            @click="activeTab = 'ingest'"
+                            class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                        >
+                            Go to Ingest
+                        </button>
+                    </div>
+                </template>
+
+                <!-- Loading State -->
+                <template x-if="loading">
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        <template x-for="i in 10" :key="i">
+                            <div class="bg-gray-800/50 rounded-xl overflow-hidden animate-pulse">
+                                <div class="aspect-[2/3] bg-gray-700"></div>
+                                <div class="p-3">
+                                    <div class="h-4 bg-gray-700 rounded mb-2"></div>
+                                    <div class="h-3 bg-gray-700 rounded w-2/3"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Pagination -->
+                <div x-show="movies.length > 0" class="flex justify-center mt-8 space-x-2">
+                    <button
+                        @click="prevPage()"
+                        :disabled="movieFilters.offset === 0"
+                        class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg disabled:opacity-50"
+                    >
+                        ← Previous
+                    </button>
+                    <span class="px-4 py-2 text-gray-400">
+                        Page <span x-text="Math.floor(movieFilters.offset / movieFilters.limit) + 1"></span>
+                    </span>
+                    <button
+                        @click="nextPage()"
+                        :disabled="!hasMoreMovies"
+                        class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg disabled:opacity-50"
+                    >
+                        Next →
+                    </button>
+                </div>
+            </section>
+
+            <!-- GENRES TAB -->
+            <section x-show="activeTab === 'genres'" class="fade-in">
+                <h2 class="text-2xl font-bold mb-6">Genres</h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <template x-for="genre in genres" :key="genre.id">
+                        <div
+                            @click="filterByGenre(genre)"
+                            class="bg-gray-800/50 rounded-xl p-6 cursor-pointer node-card"
+                        >
+                            <h3 class="text-lg font-bold mb-2" x-text="genre.name"></h3>
+                            <div class="text-2xl font-bold text-indigo-400" x-text="genre.movieCount?.toLocaleString() || 0"></div>
+                            <div class="text-sm text-gray-400">movies</div>
+                        </div>
+                    </template>
+                </div>
+
+                <template x-if="genres.length === 0 && !loading">
+                    <div class="text-center py-16">
+                        <div class="text-6xl mb-4">🏷️</div>
+                        <h3 class="text-xl font-bold mb-2">No Genres Found</h3>
+                        <p class="text-gray-400">Genres will appear after data ingestion</p>
+                    </div>
+                </template>
+            </section>
+
+            <!-- FEED PREVIEW TAB -->
+            <section x-show="activeTab === 'feeds'" class="fade-in">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-2">
+                        📡 <span class="bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">Feed Preview</span>
+                    </h2>
+                    <p class="text-gray-400">Preview distribution feeds in platform-specific formats</p>
+                </div>
+
+                <!-- Platform Selection -->
+                <div class="flex justify-center gap-4 mb-8">
+                    <button
+                        @click="feedPlatform = 'netflix'"
+                        :class="feedPlatform === 'netflix' ? 'badge-netflix' : 'bg-gray-800 hover:bg-gray-700'"
+                        class="px-6 py-3 rounded-lg font-medium transition-colors"
+                    >
+                        Netflix IMF
+                    </button>
+                    <button
+                        @click="feedPlatform = 'amazon'"
+                        :class="feedPlatform === 'amazon' ? 'badge-amazon' : 'bg-gray-800 hover:bg-gray-700'"
+                        class="px-6 py-3 rounded-lg font-medium transition-colors"
+                    >
+                        Amazon MEC
+                    </button>
+                    <button
+                        @click="feedPlatform = 'fast'"
+                        :class="feedPlatform === 'fast' ? 'badge-fast' : 'bg-gray-800 hover:bg-gray-700'"
+                        class="px-6 py-3 rounded-lg font-medium transition-colors"
+                    >
+                        FAST MRSS
+                    </button>
+                </div>
+
+                <!-- Feed Format Info -->
+                <div class="bg-gray-800/50 rounded-xl p-6 mb-6">
+                    <template x-if="feedPlatform === 'netflix'">
+                        <div>
+                            <h3 class="text-xl font-bold mb-2 text-red-400">Netflix IMF Package</h3>
+                            <p class="text-gray-400 mb-4">Interoperable Master Format (SMPTE ST 2067) for Netflix content delivery</p>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Format</div>
+                                    <div class="font-bold">XML + MXF</div>
+                                </div>
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Resolution</div>
+                                    <div class="font-bold">Up to 4K HDR</div>
+                                </div>
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Audio</div>
+                                    <div class="font-bold">Dolby Atmos</div>
+                                </div>
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Subtitles</div>
+                                    <div class="font-bold">IMSC 1.1</div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="feedPlatform === 'amazon'">
+                        <div>
+                            <h3 class="text-xl font-bold mb-2 text-blue-400">Amazon MEC Feed</h3>
+                            <p class="text-gray-400 mb-4">Media Entertainment Core (EMA Avails v2.5) for Amazon Prime Video</p>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Format</div>
+                                    <div class="font-bold">XML/JSON</div>
+                                </div>
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Transaction</div>
+                                    <div class="font-bold">EST/VOD/SVOD</div>
+                                </div>
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Territories</div>
+                                    <div class="font-bold">Multi-region</div>
+                                </div>
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Rights</div>
+                                    <div class="font-bold">Avails Spec</div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="feedPlatform === 'fast'">
+                        <div>
+                            <h3 class="text-xl font-bold mb-2 text-green-400">FAST MRSS Feed</h3>
+                            <p class="text-gray-400 mb-4">Media RSS 2.0 for Pluto TV, Tubi, Roku Channel, Samsung TV Plus</p>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Format</div>
+                                    <div class="font-bold">XML RSS</div>
+                                </div>
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Model</div>
+                                    <div class="font-bold">AVOD/FAST</div>
+                                </div>
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Schedule</div>
+                                    <div class="font-bold">24/7 Linear</div>
+                                </div>
+                                <div class="p-3 bg-gray-700/50 rounded-lg">
+                                    <div class="text-gray-400">Platforms</div>
+                                    <div class="font-bold">5+ channels</div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Sample Feed Preview -->
+                <div class="bg-gray-900 rounded-xl p-4 overflow-hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="font-medium">Sample Feed Output</h4>
+                        <button
+                            @click="copyFeed()"
+                            class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors"
+                        >
+                            Copy
+                        </button>
+                    </div>
+                    <pre class="feed-preview text-xs text-green-400 overflow-x-auto"><code x-text="feedPreview"></code></pre>
+                </div>
+            </section>
+
+            <!-- SEMANTIC SEARCH TAB -->
+            <section x-show="activeTab === 'search'" class="fade-in">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-2">
+                        🔍 <span class="bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">Semantic Search</span>
+                    </h2>
+                    <p class="text-gray-400">Find movies using natural language powered by Vertex AI embeddings</p>
+                </div>
+
+                <!-- Search Box -->
+                <div class="bg-gray-800/50 rounded-xl p-6 mb-6">
+                    <div class="max-w-2xl mx-auto">
+                        <div class="relative">
+                            <input
+                                type="text"
+                                x-model="searchQuery"
+                                @keydown.enter="performSemanticSearch()"
+                                placeholder="Describe the kind of movie you're looking for..."
+                                class="w-full bg-gray-700 border border-gray-600 rounded-xl px-6 py-4 pr-32 text-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                            >
+                            <button
+                                @click="performSemanticSearch()"
+                                :disabled="searching || !searchQuery.trim()"
+                                class="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg font-medium transition-colors"
+                            >
+                                <span x-show="!searching">Search</span>
+                                <span x-show="searching">...</span>
+                            </button>
+                        </div>
+                        <div class="flex flex-wrap gap-2 mt-4 justify-center">
+                            <button @click="searchQuery = 'epic space adventure with aliens'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">epic space adventure</button>
+                            <button @click="searchQuery = 'romantic comedy in New York'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">romantic comedy NYC</button>
+                            <button @click="searchQuery = 'thriller about a serial killer'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">thriller serial killer</button>
+                            <button @click="searchQuery = 'animated movie for kids about animals'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">animated kids animals</button>
+                            <button @click="searchQuery = 'mind-bending sci-fi about time travel'; performSemanticSearch()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition-colors">time travel sci-fi</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Info -->
+                <div class="bg-gray-800/30 border border-gray-700 rounded-xl p-4 mb-6">
+                    <div class="flex items-start space-x-3">
+                        <div class="text-2xl">💡</div>
+                        <div>
+                            <h4 class="font-medium text-purple-400">How Semantic Search Works</h4>
+                            <p class="text-sm text-gray-400 mt-1">
+                                Unlike keyword search, semantic search understands the <strong>meaning</strong> of your query.
+                                Your query and movie descriptions are converted to 768-dimensional vectors using Vertex AI embeddings,
+                                then matched by cosine similarity. This finds movies that are conceptually related, even without exact word matches.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Results -->
+                <template x-if="searchResults.length > 0">
+                    <div>
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-bold">
+                                Found <span class="text-purple-400" x-text="searchResults.length"></span> matches
+                            </h3>
+                            <span class="text-sm text-gray-400" x-text="'Search took ' + searchDuration + 'ms'"></span>
+                        </div>
+                        <div class="space-y-4">
+                            <template x-for="(result, index) in searchResults" :key="result.id + '-' + index">
+                                <div
+                                    @click="selectMovie(result)"
+                                    class="bg-gray-800/50 rounded-xl p-4 cursor-pointer node-card flex gap-4"
+                                >
+                                    <!-- Rank Badge -->
+                                    <div class="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold"
+                                         :class="index < 3 ? 'bg-purple-600' : 'bg-gray-700'"
+                                         x-text="'#' + (index + 1)">
+                                    </div>
+
+                                    <!-- Poster -->
+                                    <div class="flex-shrink-0 w-20 h-30 bg-gray-700 rounded-lg overflow-hidden">
+                                        <template x-if="result.posterPath">
+                                            <img
+                                                :src="'https://image.tmdb.org/t/p/w154' + result.posterPath"
+                                                :alt="result.title"
+                                                class="w-full h-full object-cover"
+                                                loading="lazy"
+                                            >
+                                        </template>
+                                        <template x-if="!result.posterPath">
+                                            <div class="w-full h-full flex items-center justify-center text-2xl">🎬</div>
+                                        </template>
+                                    </div>
+
+                                    <!-- Info -->
+                                    <div class="flex-grow min-w-0">
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div>
+                                                <h4 class="font-bold text-lg truncate" x-text="result.title"></h4>
+                                                <div class="flex flex-wrap gap-2 mt-1">
+                                                    <span class="px-2 py-0.5 bg-orange-600/50 rounded text-xs">
+                                                        ⭐ <span x-text="result.voteAverage?.toFixed(1)"></span>
+                                                    </span>
+                                                    <span class="px-2 py-0.5 bg-gray-700 rounded text-xs" x-text="result.year"></span>
+                                                </div>
+                                            </div>
+                                            <div class="flex-shrink-0 text-right">
+                                                <div class="text-2xl font-bold text-purple-400" x-text="(result.similarity * 100).toFixed(1) + '%'"></div>
+                                                <div class="text-xs text-gray-400">similarity</div>
+                                            </div>
+                                        </div>
+                                        <p class="text-sm text-gray-400 mt-2 line-clamp-2" x-text="result.overview"></p>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Empty State (No Results) -->
+                <template x-if="searchPerformed && searchResults.length === 0 && !searching">
+                    <div class="text-center py-16">
+                        <div class="text-6xl mb-4">🔎</div>
+                        <h3 class="text-xl font-bold mb-2">No Matches Found</h3>
+                        <p class="text-gray-400 mb-4">Try a different query or check if movies have been ingested with embeddings</p>
+                    </div>
+                </template>
+
+                <!-- Initial State -->
+                <template x-if="!searchPerformed && searchResults.length === 0">
+                    <div class="text-center py-16">
+                        <div class="text-6xl mb-4">🧠</div>
+                        <h3 class="text-xl font-bold mb-2">AI-Powered Movie Discovery</h3>
+                        <p class="text-gray-400 mb-4">Enter a natural language description to find semantically similar movies</p>
+                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+                            <span class="px-3 py-1 bg-gray-800 rounded-full">Vertex AI</span>
+                            <span>×</span>
+                            <span class="px-3 py-1 bg-gray-800 rounded-full">768-dim embeddings</span>
+                            <span>×</span>
+                            <span class="px-3 py-1 bg-gray-800 rounded-full">Cosine Similarity</span>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Loading State -->
+                <template x-if="searching">
+                    <div class="text-center py-16">
+                        <div class="text-6xl mb-4 animate-pulse">🔮</div>
+                        <h3 class="text-xl font-bold mb-2">Searching...</h3>
+                        <p class="text-gray-400">Generating query embedding and finding similar movies</p>
+                    </div>
+                </template>
+            </section>
+
+            <!-- INGEST TAB -->
+            <section x-show="activeTab === 'ingest'" class="fade-in">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-2">
+                        ⚙️ <span class="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">Data Ingestion</span>
+                    </h2>
+                    <p class="text-gray-400">Process TMDB dataset into knowledge graph</p>
+                </div>
+
+                <!-- Data Source -->
+                <div class="bg-gray-800/50 rounded-xl p-6 mb-6">
+                    <h3 class="text-xl font-bold mb-4">Data Source</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="p-4 bg-gray-700/50 rounded-lg">
+                            <div class="text-sm text-gray-400">GCS Bucket</div>
+                            <div class="font-mono text-sm">gs://nexus-ummid-datasets</div>
+                        </div>
+                        <div class="p-4 bg-gray-700/50 rounded-lg">
+                            <div class="text-sm text-gray-400">Dataset File</div>
+                            <div class="font-mono text-sm">TMDB_movie_dataset_v11.csv</div>
+                        </div>
+                        <div class="p-4 bg-gray-700/50 rounded-lg">
+                            <div class="text-sm text-gray-400">Dataset Size</div>
+                            <div class="font-mono text-sm">~595 MB (1.33M movies)</div>
+                        </div>
+                        <div class="p-4 bg-gray-700/50 rounded-lg">
+                            <div class="text-sm text-gray-400">Est. Processing Time</div>
+                            <div class="font-mono text-sm">6-8 hours (full)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ingestion Controls -->
+                <div class="bg-gray-800/50 rounded-xl p-6 mb-6">
+                    <h3 class="text-xl font-bold mb-4">Ingestion Controls</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Number of Movies to Ingest</label>
+                            <select
+                                x-model="ingestLimit"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                            >
+                                <option value="100">100 (Quick Test)</option>
+                                <option value="1000">1,000 (Sample)</option>
+                                <option value="10000">10,000 (Medium)</option>
+                                <option value="100000">100,000 (Large - Recommended)</option>
+                                <option value="0">All (1.33M - 6-8 hours)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="flex items-center space-x-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    x-model="generateEmbeddings"
+                                    class="w-5 h-5 bg-gray-700 border-gray-600 rounded focus:ring-purple-500 focus:ring-2"
+                                >
+                                <div>
+                                    <span class="font-medium">Generate Vertex AI Embeddings</span>
+                                    <p class="text-sm text-gray-400">Enable semantic search (768-dim vectors)</p>
+                                </div>
+                            </label>
+                        </div>
+                        <div x-show="generateEmbeddings" class="p-4 bg-purple-600/20 border border-purple-500/30 rounded-lg">
+                            <div class="flex items-start space-x-3">
+                                <div class="text-xl">🧠</div>
+                                <div class="text-sm">
+                                    <p class="font-medium text-purple-300">Embeddings will be generated using Vertex AI</p>
+                                    <p class="text-gray-400 mt-1">This adds ~2 seconds per batch of 5 movies. For 100k movies, expect ~5-6 hours total processing time.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <button
+                                @click="startIngestion()"
+                                :disabled="ingesting"
+                                class="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 rounded-lg font-medium transition-colors"
+                            >
+                                <span x-show="!ingesting">🚀 Start Ingestion</span>
+                                <span x-show="ingesting">⏳ Processing...</span>
+                            </button>
+                            <button
+                                @click="clearAllData()"
+                                :disabled="ingesting || clearing"
+                                class="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded-lg font-medium transition-colors"
+                            >
+                                <span x-show="!clearing">🗑️ Clear Data</span>
+                                <span x-show="clearing">⏳ Clearing...</span>
+                            </button>
+                            <button
+                                @click="refreshStats()"
+                                class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+                            >
+                                🔄 Refresh Stats
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ingestion Progress -->
+                <template x-if="ingestionResult">
+                    <div class="bg-gray-800/50 rounded-xl p-6">
+                        <h3 class="text-xl font-bold mb-4">Ingestion Result</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                            <div class="p-4 bg-green-600/20 rounded-lg">
+                                <div class="text-2xl font-bold text-green-400" x-text="(ingestionResult.stats?.moviesStored || ingestionResult.stats?.stored || 0).toLocaleString()"></div>
+                                <div class="text-sm text-gray-400">Movies Stored</div>
+                            </div>
+                            <div class="p-4 bg-purple-600/20 rounded-lg">
+                                <div class="text-2xl font-bold text-purple-400" x-text="(ingestionResult.stats?.embeddingsGenerated || 0).toLocaleString()"></div>
+                                <div class="text-sm text-gray-400">Embeddings</div>
+                            </div>
+                            <div class="p-4 bg-red-600/20 rounded-lg">
+                                <div class="text-2xl font-bold text-red-400" x-text="ingestionResult.stats?.errors || ingestionResult.stats?.failed || 0"></div>
+                                <div class="text-sm text-gray-400">Errors</div>
+                            </div>
+                            <div class="p-4 bg-blue-600/20 rounded-lg">
+                                <div class="text-2xl font-bold text-blue-400" x-text="((ingestionResult.stats?.durationMs || 0) / 1000).toFixed(1) + 's'"></div>
+                                <div class="text-sm text-gray-400">Duration</div>
+                            </div>
+                            <div class="p-4 bg-cyan-600/20 rounded-lg">
+                                <div class="text-2xl font-bold text-cyan-400" x-text="ingestionResult.stats?.genresFound || ingestionResult.stats?.cacheStats?.genres || 0"></div>
+                                <div class="text-sm text-gray-400">Genres</div>
+                            </div>
+                        </div>
+                        <template x-if="ingestionResult.stats?.embeddingsGenerated > 0">
+                            <div class="mt-4 p-4 bg-purple-600/20 border border-purple-500/30 rounded-lg">
+                                <div class="flex items-center space-x-3">
+                                    <div class="text-xl">✅</div>
+                                    <div>
+                                        <p class="font-medium text-purple-300">Semantic Search Ready!</p>
+                                        <p class="text-sm text-gray-400">You can now use the Semantic Search tab to find movies by description</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </section>
+        </div>
+    </main>
+
+    <!-- Movie Detail Modal -->
+    <div
+        x-show="selectedMovie"
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-200"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
+        @click.self="selectedMovie = null"
+    >
+        <div
+            x-show="selectedMovie"
+            x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100"
+            class="bg-gray-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        >
+            <template x-if="selectedMovie">
+                <div>
+                    <!-- Backdrop -->
+                    <div class="relative h-48 md:h-64 overflow-hidden rounded-t-2xl">
+                        <template x-if="selectedMovie.backdropPath">
+                            <img
+                                :src="'https://image.tmdb.org/t/p/w1280' + selectedMovie.backdropPath"
+                                class="w-full h-full object-cover"
+                            >
+                        </template>
+                        <div class="absolute inset-0 bg-gradient-to-t from-gray-900 to-transparent"></div>
+                        <button
+                            @click="selectedMovie = null"
+                            class="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 rounded-full"
+                        >
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="p-6">
+                        <h2 class="text-2xl font-bold mb-2" x-text="selectedMovie.title"></h2>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="px-3 py-1 bg-orange-600 rounded-full text-sm">
+                                ⭐ <span x-text="selectedMovie.voteAverage?.toFixed(1)"></span>
+                            </span>
+                            <span class="px-3 py-1 bg-gray-700 rounded-full text-sm" x-text="selectedMovie.year"></span>
+                            <span x-show="selectedMovie.runtime" class="px-3 py-1 bg-gray-700 rounded-full text-sm" x-text="selectedMovie.runtime + ' min'"></span>
+                            <span class="px-3 py-1 bg-gray-700 rounded-full text-sm" x-text="selectedMovie.status"></span>
+                        </div>
+                        <p class="text-gray-300 mb-6" x-text="selectedMovie.overview"></p>
+
+                        <!-- Distribution Status -->
+                        <div class="mb-6">
+                            <h3 class="text-lg font-bold mb-3">Distribution Readiness</h3>
+                            <div class="flex gap-2">
+                                <button @click="previewFeed('netflix')" class="px-4 py-2 badge-netflix rounded-lg text-sm">
+                                    Netflix IMF
+                                </button>
+                                <button @click="previewFeed('amazon')" class="px-4 py-2 badge-amazon rounded-lg text-sm">
+                                    Amazon MEC
+                                </button>
+                                <button @click="previewFeed('fast')" class="px-4 py-2 badge-fast rounded-lg text-sm">
+                                    FAST MRSS
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Metadata -->
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <span class="text-gray-400">TMDB ID:</span>
+                                <span class="ml-2 font-mono" x-text="selectedMovie.id"></span>
+                            </div>
+                            <div x-show="selectedMovie.imdbId">
+                                <span class="text-gray-400">IMDB ID:</span>
+                                <span class="ml-2 font-mono" x-text="selectedMovie.imdbId"></span>
+                            </div>
+                            <div x-show="selectedMovie.budget">
+                                <span class="text-gray-400">Budget:</span>
+                                <span class="ml-2">$<span x-text="selectedMovie.budget?.toLocaleString()"></span></span>
+                            </div>
+                            <div x-show="selectedMovie.revenue">
+                                <span class="text-gray-400">Revenue:</span>
+                                <span class="ml-2">$<span x-text="selectedMovie.revenue?.toLocaleString()"></span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE = window.location.hostname === 'localhost'
+            ? 'http://localhost:8080'
+            : 'https://nexus-ummid-api-181630922804.us-central1.run.app';
+
+        function knowledgeGraphApp() {
+            return {
+                // State
+                activeTab: 'overview',
+                loading: false,
+
+                // Data
+                stats: {
+                    totalMovies: 0,
+                    totalGenres: 0,
+                    totalCompanies: 0,
+                    totalCountries: 0,
+                    totalLanguages: 0,
+                    totalKeywords: 0,
+                    totalEdges: 0,
+                    readyForNetflix: 0,
+                    readyForAmazon: 0,
+                    readyForFAST: 0
+                },
+                movies: [],
+                genres: [],
+                selectedMovie: null,
+                hasMoreMovies: false,
+
+                // Filters
+                movieFilters: {
+                    genre: '',
+                    sortBy: 'popularity',
+                    sortOrder: 'desc',
+                    limit: 20,
+                    offset: 0
+                },
+
+                // Feed Preview
+                feedPlatform: 'netflix',
+                feedPreview: '',
+
+                // Semantic Search
+                searchQuery: '',
+                searchResults: [],
+                searching: false,
+                searchPerformed: false,
+                searchDuration: 0,
+
+                // Ingestion
+                ingestLimit: 100,
+                generateEmbeddings: true,
+                ingesting: false,
+                clearing: false,
+                ingestionResult: null,
+
+                // Initialization
+                async init() {
+                    await this.refreshStats();
+                    this.updateFeedPreview();
+                },
+
+                // Stats
+                async refreshStats() {
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/knowledge-graph/stats`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.stats = data.stats || this.stats;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load stats:', error);
+                    }
+                },
+
+                // Movies
+                async loadMovies() {
+                    this.loading = true;
+                    try {
+                        const params = new URLSearchParams({
+                            limit: this.movieFilters.limit,
+                            offset: this.movieFilters.offset,
+                            sortBy: this.movieFilters.sortBy,
+                            sortOrder: this.movieFilters.sortOrder
+                        });
+                        if (this.movieFilters.genre) {
+                            params.set('genre', this.movieFilters.genre);
+                        }
+
+                        const response = await fetch(`${API_BASE}/api/v1/knowledge-graph/movies?${params}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.movies = data.movies || [];
+                            this.hasMoreMovies = data.pagination?.hasMore || false;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load movies:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                nextPage() {
+                    this.movieFilters.offset += this.movieFilters.limit;
+                    this.loadMovies();
+                },
+
+                prevPage() {
+                    this.movieFilters.offset = Math.max(0, this.movieFilters.offset - this.movieFilters.limit);
+                    this.loadMovies();
+                },
+
+                selectMovie(movie) {
+                    this.selectedMovie = movie;
+                },
+
+                // Genres
+                async loadGenres() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/knowledge-graph/genres`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.genres = data.genres || [];
+                        }
+                    } catch (error) {
+                        console.error('Failed to load genres:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                filterByGenre(genre) {
+                    this.movieFilters.genre = genre.id;
+                    this.movieFilters.offset = 0;
+                    this.activeTab = 'browse';
+                    this.loadMovies();
+                },
+
+                // Semantic Search
+                async performSemanticSearch() {
+                    if (!this.searchQuery.trim()) return;
+
+                    this.searching = true;
+                    this.searchPerformed = true;
+                    this.searchResults = [];
+                    const startTime = Date.now();
+
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/knowledge-graph/search/semantic`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                query: this.searchQuery,
+                                limit: 20,
+                                minSimilarity: 0.3
+                            })
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.searchResults = data.results || [];
+                            this.searchDuration = Date.now() - startTime;
+                        } else {
+                            console.error('Semantic search failed:', await response.text());
+                        }
+                    } catch (error) {
+                        console.error('Semantic search error:', error);
+                    } finally {
+                        this.searching = false;
+                    }
+                },
+
+                // Feed Preview
+                updateFeedPreview() {
+                    if (this.feedPlatform === 'netflix') {
+                        this.feedPreview = `<?xml version="1.0" encoding="UTF-8"?>
+<IMFPackage xmlns="http://www.smpte-ra.org/ns/2067-3/2016">
+  <PackageId>urn:uuid:nexus-ummid-${Date.now()}</PackageId>
+  <IssueDate>${new Date().toISOString()}</IssueDate>
+  <Issuer>Nexus-UMMID Platform</Issuer>
+  <ContentTitle>Sample Movie Title</ContentTitle>
+  <ContentKind>feature</ContentKind>
+
+  <AssetList>
+    <Asset>
+      <Id>video-asset-001</Id>
+      <Type>video/mxf</Type>
+      <EditRate>24000/1001</EditRate>
+      <IntrinsicDuration>144000</IntrinsicDuration>
+      <ColorPrimaries>ITU-R BT.2020</ColorPrimaries>
+      <TransferCharacteristic>ST 2084</TransferCharacteristic>
+    </Asset>
+    <Asset>
+      <Id>audio-asset-en</Id>
+      <Type>audio/mxf</Type>
+      <Language>en-US</Language>
+      <Channels>7.1.4</Channels>
+      <SampleRate>48000</SampleRate>
+    </Asset>
+  </AssetList>
+</IMFPackage>`;
+                    } else if (this.feedPlatform === 'amazon') {
+                        this.feedPreview = `{
+  "Avails": {
+    "AvailID": "nexus-ummid-${Date.now()}",
+    "Title": {
+      "TitleID": "tmdb-sample",
+      "TitleName": "Sample Movie Title",
+      "ContentType": "Movie"
+    },
+    "Transaction": {
+      "Territory": "US",
+      "TransactionType": "SVOD",
+      "Start": "${new Date().toISOString().split('T')[0]}",
+      "End": "2025-12-31"
+    },
+    "Asset": {
+      "VideoFormat": "4K",
+      "HDR": "HDR10+",
+      "AudioFormat": "Dolby Atmos"
+    },
+    "Metadata": {
+      "ReleaseYear": 2024,
+      "Runtime": 120,
+      "Rating": "PG-13",
+      "Synopsis": "A compelling story..."
+    }
+  }
+}`;
+                    } else {
+                        this.feedPreview = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Nexus-UMMID FAST Channel</title>
+    <link>https://nexus-ummid.com</link>
+    <description>Entertainment powered by AI</description>
+    <pubDate>${new Date().toUTCString()}</pubDate>
+
+    <item>
+      <title>Sample Movie Title</title>
+      <guid>nexus-ummid-${Date.now()}</guid>
+      <pubDate>${new Date().toUTCString()}</pubDate>
+      <media:content
+        url="https://cdn.example.com/video.mp4"
+        type="video/mp4"
+        duration="7200"
+        width="1920"
+        height="1080">
+        <media:title>Sample Movie Title</media:title>
+        <media:description>A compelling story...</media:description>
+        <media:thumbnail url="https://image.tmdb.org/t/p/w500/poster.jpg"/>
+        <media:category>Action</media:category>
+        <media:rating scheme="urn:mpaa">PG-13</media:rating>
+      </media:content>
+    </item>
+  </channel>
+</rss>`;
+                    }
+                },
+
+                previewFeed(platform) {
+                    this.feedPlatform = platform;
+                    this.updateFeedPreview();
+                    this.activeTab = 'feeds';
+                },
+
+                copyFeed() {
+                    navigator.clipboard.writeText(this.feedPreview);
+                    alert('Feed copied to clipboard!');
+                },
+
+                // Ingestion
+                async startIngestion() {
+                    this.ingesting = true;
+                    this.ingestionResult = null;
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/knowledge-graph/ingest/start`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                limit: parseInt(this.ingestLimit) || 100,
+                                generateEmbeddings: this.generateEmbeddings
+                            })
+                        });
+                        if (response.ok) {
+                            this.ingestionResult = await response.json();
+                            await this.refreshStats();
+                        } else {
+                            console.error('Ingestion failed:', await response.text());
+                            this.ingestionResult = { error: 'Ingestion failed' };
+                        }
+                    } catch (error) {
+                        console.error('Ingestion error:', error);
+                        this.ingestionResult = { error: error.message };
+                    } finally {
+                        this.ingesting = false;
+                    }
+                },
+
+                async clearAllData() {
+                    if (!confirm('Are you sure you want to delete ALL knowledge graph data? This cannot be undone.')) {
+                        return;
+                    }
+                    this.clearing = true;
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/knowledge-graph/data`, {
+                            method: 'DELETE'
+                        });
+                        if (response.ok) {
+                            const result = await response.json();
+                            alert(`Data cleared successfully!\n\nDeleted:\n- ${result.deletedCounts.movies} movies\n- ${result.deletedCounts.genres} genres\n- ${result.deletedCounts.edges} edges`);
+                            this.ingestionResult = null;
+                            await this.refreshStats();
+                            this.movies = [];
+                            this.genres = [];
+                            this.searchResults = [];
+                        } else {
+                            const error = await response.json();
+                            alert('Failed to clear data: ' + (error.details || error.error));
+                        }
+                    } catch (error) {
+                        console.error('Clear data error:', error);
+                        alert('Failed to clear data: ' + error.message);
+                    } finally {
+                        this.clearing = false;
+                    }
+                }
+            };
+        }
+
+        // Watch for platform changes
+        document.addEventListener('alpine:init', () => {
+            Alpine.effect(() => {
+                const app = Alpine.store('app');
+                if (app && app.feedPlatform) {
+                    app.updateFeedPreview();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
