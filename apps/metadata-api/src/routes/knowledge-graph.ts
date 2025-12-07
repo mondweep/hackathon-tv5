@@ -611,7 +611,7 @@ router.get('/diagnostics/csv-sample', async (_req: Request, res: Response): Prom
     let sampleRow: Record<string, unknown> | null = null;
 
     for await (const row of gcsReader.streamRows(undefined, 1)) {
-      sampleRow = row as Record<string, unknown>;
+      sampleRow = row as unknown as Record<string, unknown>;
       break;
     }
 
