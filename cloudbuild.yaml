@@ -28,10 +28,33 @@ steps:
           --project=${_GCP_PROJECT} \
           --description="Nexus-UMMID Metadata API container images"
 
+  # Ensure Cloud Run service account has Firestore access
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'grant-firestore-access'
+    waitFor: ['create-repo']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        # Get project number
+        PROJECT_NUM=$$(gcloud projects describe ${_GCP_PROJECT} --format='value(projectNumber)')
+
+        # Grant Firestore access (using datastore.user role)
+        gcloud projects add-iam-policy-binding ${_GCP_PROJECT} \
+          --member="serviceAccount:$${PROJECT_NUM}-compute@developer.gserviceaccount.com" \
+          --role="roles/datastore.user" \
+          --condition=None 2>/dev/null || echo "Firestore permission may already exist"
+
+        # Also grant Storage access for GCS bucket
+        gcloud projects add-iam-policy-binding ${_GCP_PROJECT} \
+          --member="serviceAccount:$${PROJECT_NUM}-compute@developer.gserviceaccount.com" \
+          --role="roles/storage.objectViewer" \
+          --condition=None 2>/dev/null || echo "Storage permission may already exist"
+
   # Build and deploy metadata-api
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-api'
-    waitFor: ['create-repo']
+    waitFor: ['grant-firestore-access']
     dir: 'apps/metadata-api'
     args:
       - 'build'
