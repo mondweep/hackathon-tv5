@@ -733,6 +733,107 @@ router.get('/diagnostics/collections', async (_req: Request, res: Response): Pro
 // ============================================
 
 /**
+ * POST /api/v1/knowledge-graph/ingest/test-one
+ * Test ingestion with a single movie to debug storage
+ */
+router.post('/ingest/test-one', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const gcsReader = getGCSReader();
+    const processor = getProcessor();
+    // const store = getStore(); // Not used - we do direct Firestore writes for debugging
+
+    // Get first row
+    let row: any = null;
+    for await (const r of gcsReader.streamRows(undefined, 1)) {
+      row = r;
+      break;
+    }
+
+    if (!row) {
+      res.status(404).json({ error: 'No rows in CSV' });
+      return;
+    }
+
+    logger.info('Test ingestion - raw row', { id: row.id, title: row.title, genres: row.genres });
+
+    // Process the row
+    const processed = processor.processRow(row);
+    if (!processed) {
+      res.status(400).json({ error: 'Failed to process row', row: { id: row.id, title: row.title } });
+      return;
+    }
+
+    logger.info('Test ingestion - processed', {
+      movieId: processed.movie.id,
+      movieTitle: processed.movie.title,
+      genreCount: processed.genres.length,
+      edgeCount: processed.edges.length,
+    });
+
+    // Store directly with detailed error handling
+    const { getFirestore } = await import('../db/firestore');
+    const db = getFirestore();
+
+    // Try storing movie directly
+    try {
+      const movieRef = db.collection('kg_movies').doc(processed.movie.id);
+      await movieRef.set(processed.movie, { merge: true });
+      logger.info('Test ingestion - movie stored', { id: processed.movie.id });
+    } catch (movieError) {
+      logger.error('Test ingestion - movie store failed', { error: movieError });
+      res.status(500).json({
+        error: 'Movie store failed',
+        details: movieError instanceof Error ? movieError.message : 'Unknown',
+        movie: { id: processed.movie.id, title: processed.movie.title },
+      });
+      return;
+    }
+
+    // Store genres
+    for (const genre of processed.genres) {
+      try {
+        const genreRef = db.collection('kg_genres').doc(genre.id);
+        await genreRef.set(genre, { merge: true });
+      } catch (genreError) {
+        logger.error('Test ingestion - genre store failed', { genre: genre.name, error: genreError });
+      }
+    }
+
+    // Store edges
+    for (const edge of processed.edges) {
+      try {
+        const edgeRef = db.collection('kg_edges').doc(edge.id);
+        await edgeRef.set(edge, { merge: true });
+      } catch (edgeError) {
+        logger.error('Test ingestion - edge store failed', { edge: edge.id, error: edgeError });
+      }
+    }
+
+    // Verify storage
+    const verifySnap = await db.collection('kg_movies').doc(processed.movie.id).get();
+
+    res.json({
+      success: true,
+      row: { id: row.id, title: row.title, genres: row.genres },
+      processed: {
+        movieId: processed.movie.id,
+        movieTitle: processed.movie.title,
+        genreCount: processed.genres.length,
+        genres: processed.genres.map(g => g.name),
+        edgeCount: processed.edges.length,
+      },
+      verification: {
+        movieExists: verifySnap.exists,
+        movieData: verifySnap.exists ? { id: verifySnap.data()?.id, title: verifySnap.data()?.title } : null,
+      },
+    });
+  } catch (error) {
+    logger.error('Test ingestion failed', { error });
+    res.status(500).json({ error: 'Test ingestion failed', details: error instanceof Error ? error.message : 'Unknown' });
+  }
+});
+
+/**
  * POST /api/v1/knowledge-graph/ingest/start
  * Start dataset ingestion with embeddings
  */
