@@ -5,17 +5,14 @@
  * Optimized for batch operations and efficient querying.
  */
 
-import { Firestore, FieldValue, WriteBatch } from '@google-cloud/firestore';
+import { Firestore } from '@google-cloud/firestore';
 import { getFirestore, batchWrite } from '../db/firestore';
 import { logger } from '../utils/logger';
 import {
-  GraphNode,
   MovieNode,
   GenreNode,
-  ProductionCompanyNode,
   CountryNode,
   LanguageNode,
-  KeywordNode,
   Hyperedge,
   GraphQuery,
   GraphQueryResult,
@@ -479,7 +476,7 @@ export class KnowledgeGraphStore {
     ]);
 
     // Get distribution readiness counts
-    const readySnapshot = await this.db
+    await this.db
       .collection(COLLECTIONS.MOVIES)
       .where('distributionStatus', '==', 'ready')
       .limit(1)

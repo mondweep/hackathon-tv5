@@ -9,12 +9,11 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { query, param, body, validationResult } from 'express-validator';
+import { query, param, validationResult } from 'express-validator';
 import { logger } from '../utils/logger';
 import {
   getStore,
   getProcessor,
-  getGCSReader,
   GraphQuery,
   MovieNode,
 } from '../knowledge-graph';
@@ -55,6 +54,7 @@ function movieToMediaMetadata(movie: MovieNode): MediaMetadata {
     type: 'movie',
     synopsis: movie.overview,
     genres: [], // Would need to query edges
+    keywords: [], // Would need to query edges
     language: 'en',
     rating: movie.adult ? 'R' : 'PG-13',
     duration: movie.runtime,
@@ -106,7 +106,7 @@ router.get(
     query('sortBy').optional().isIn(['popularity', 'voteAverage', 'year', 'title']),
     query('sortOrder').optional().isIn(['asc', 'desc']),
   ],
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response): Promise<void> => {
     if (handleValidationErrors(req, res)) return;
 
     try {
@@ -176,7 +176,7 @@ router.get(
 router.get(
   '/movies/:id',
   [param('id').isString().notEmpty()],
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response): Promise<void> => {
     if (handleValidationErrors(req, res)) return;
 
     try {
@@ -184,7 +184,8 @@ router.get(
       const movie = await store.getMovie(req.params.id);
 
       if (!movie) {
-        return res.status(404).json({ error: 'Movie not found' });
+        res.status(404).json({ error: 'Movie not found' });
+        return;
       }
 
       // Get edges for relationship data
@@ -236,7 +237,7 @@ router.get(
 // Genre Endpoints
 // ============================================
 
-router.get('/genres', async (req: Request, res: Response) => {
+router.get('/genres', async (_req: Request, res: Response): Promise<void> => {
   try {
     const store = getStore();
     const genres = await store.getGenres();
@@ -253,7 +254,7 @@ router.get(
     param('id').isString().notEmpty(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
   ],
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response): Promise<void> => {
     if (handleValidationErrors(req, res)) return;
 
     try {
@@ -261,7 +262,8 @@ router.get(
       const genre = await store.getGenre(req.params.id);
 
       if (!genre) {
-        return res.status(404).json({ error: 'Genre not found' });
+        res.status(404).json({ error: 'Genre not found' });
+        return;
       }
 
       const limit = req.query.limit ? Number(req.query.limit) : 20;
@@ -279,7 +281,7 @@ router.get(
 // Reference Data Endpoints
 // ============================================
 
-router.get('/countries', async (req: Request, res: Response) => {
+router.get('/countries', async (_req: Request, res: Response): Promise<void> => {
   try {
     const store = getStore();
     const countries = await store.getCountries();
@@ -290,7 +292,7 @@ router.get('/countries', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/languages', async (req: Request, res: Response) => {
+router.get('/languages', async (_req: Request, res: Response): Promise<void> => {
   try {
     const store = getStore();
     const languages = await store.getLanguages();
@@ -305,7 +307,7 @@ router.get('/languages', async (req: Request, res: Response) => {
 // Statistics Endpoint
 // ============================================
 
-router.get('/stats', async (req: Request, res: Response) => {
+router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
   try {
     const store = getStore();
     const stats = await store.getStats();
@@ -324,12 +326,13 @@ router.get('/stats', async (req: Request, res: Response) => {
  * POST /api/v1/knowledge-graph/search/semantic
  * Semantic search using Vertex AI embeddings
  */
-router.post('/search/semantic', async (req: Request, res: Response) => {
+router.post('/search/semantic', async (req: Request, res: Response): Promise<void> => {
   try {
     const { query: searchQuery, limit = 20 } = req.body;
 
     if (!searchQuery || typeof searchQuery !== 'string') {
-      return res.status(400).json({ error: 'Query is required' });
+      res.status(400).json({ error: 'Query is required' });
+      return;
     }
 
     const startTime = Date.now();
@@ -343,12 +346,12 @@ router.post('/search/semantic', async (req: Request, res: Response) => {
     const { nodes: allMovies } = await store.queryMovies({ limit: 1000 });
 
     // Filter movies with embeddings and calculate similarity
-    const moviesWithEmbeddings = allMovies.filter(
-      (m: MovieNode) => m.embedding && m.embedding.length > 0
+    const moviesWithEmbeddings = (allMovies as MovieNode[]).filter(
+      (m) => m.embedding && m.embedding.length > 0
     );
 
     const scoredMovies = moviesWithEmbeddings
-      .map((movie: MovieNode) => ({
+      .map((movie) => ({
         movie,
         similarity: cosineSimilarity(queryEmbedding, movie.embedding!),
       }))
@@ -384,13 +387,14 @@ router.post('/search/semantic', async (req: Request, res: Response) => {
  * POST /api/v1/knowledge-graph/feeds/netflix/:movieId
  * Generate Netflix IMF package for a movie
  */
-router.post('/feeds/netflix/:movieId', async (req: Request, res: Response) => {
+router.post('/feeds/netflix/:movieId', async (req: Request, res: Response): Promise<void> => {
   try {
     const store = getStore();
     const movie = await store.getMovie(req.params.movieId);
 
     if (!movie) {
-      return res.status(404).json({ error: 'Movie not found' });
+      res.status(404).json({ error: 'Movie not found' });
+      return;
     }
 
     const mediaMetadata = movieToMediaMetadata(movie);
@@ -417,13 +421,14 @@ router.post('/feeds/netflix/:movieId', async (req: Request, res: Response) => {
  * POST /api/v1/knowledge-graph/feeds/amazon/:movieId
  * Generate Amazon MEC feed for a movie
  */
-router.post('/feeds/amazon/:movieId', async (req: Request, res: Response) => {
+router.post('/feeds/amazon/:movieId', async (req: Request, res: Response): Promise<void> => {
   try {
     const store = getStore();
     const movie = await store.getMovie(req.params.movieId);
 
     if (!movie) {
-      return res.status(404).json({ error: 'Movie not found' });
+      res.status(404).json({ error: 'Movie not found' });
+      return;
     }
 
     const mediaMetadata = movieToMediaMetadata(movie);
@@ -460,14 +465,15 @@ router.post('/feeds/amazon/:movieId', async (req: Request, res: Response) => {
  * POST /api/v1/knowledge-graph/feeds/fast/:movieId
  * Generate FAST MRSS feed for a movie
  */
-router.post('/feeds/fast/:movieId', async (req: Request, res: Response) => {
+router.post('/feeds/fast/:movieId', async (req: Request, res: Response): Promise<void> => {
   try {
     const { platform = 'pluto' } = req.body;
     const store = getStore();
     const movie = await store.getMovie(req.params.movieId);
 
     if (!movie) {
-      return res.status(404).json({ error: 'Movie not found' });
+      res.status(404).json({ error: 'Movie not found' });
+      return;
     }
 
     const mediaMetadata = movieToMediaMetadata(movie);
@@ -508,12 +514,13 @@ router.post('/feeds/fast/:movieId', async (req: Request, res: Response) => {
  * POST /api/v1/knowledge-graph/feeds/batch
  * Generate feeds for multiple movies (for preview)
  */
-router.post('/feeds/batch', async (req: Request, res: Response) => {
+router.post('/feeds/batch', async (req: Request, res: Response): Promise<void> => {
   try {
     const { platform, genreId, limit = 10 } = req.body;
 
     if (!platform || !['netflix', 'amazon', 'fast'].includes(platform)) {
-      return res.status(400).json({ error: 'Valid platform required (netflix, amazon, fast)' });
+      res.status(400).json({ error: 'Valid platform required (netflix, amazon, fast)' });
+      return;
     }
 
     const store = getStore();
@@ -530,7 +537,6 @@ router.post('/feeds/batch', async (req: Request, res: Response) => {
       movies.map(async (movie) => {
         const metadata = movieToMediaMetadata(movie);
         let validation;
-        let feedPreview;
 
         try {
           if (platform === 'netflix') {
@@ -576,7 +582,7 @@ router.post('/feeds/batch', async (req: Request, res: Response) => {
  * POST /api/v1/knowledge-graph/ingest/start
  * Start dataset ingestion with embeddings
  */
-router.post('/ingest/start', async (req: Request, res: Response) => {
+router.post('/ingest/start', async (req: Request, res: Response): Promise<void> => {
   try {
     const { limit = 100, generateEmbeddings = false } = req.body;
 
@@ -608,7 +614,7 @@ router.post('/ingest/start', async (req: Request, res: Response) => {
  * POST /api/v1/knowledge-graph/ingest/quick-test
  * Quick test ingestion (100 movies, no embeddings)
  */
-router.post('/ingest/quick-test', async (req: Request, res: Response) => {
+router.post('/ingest/quick-test', async (_req: Request, res: Response): Promise<void> => {
   try {
     const pipeline = createIngestionPipeline({
       limit: 100,
@@ -633,7 +639,7 @@ router.post('/ingest/quick-test', async (req: Request, res: Response) => {
  * GET /api/v1/knowledge-graph/ingest/status
  * Get ingestion status
  */
-router.get('/ingest/status', async (req: Request, res: Response) => {
+router.get('/ingest/status', async (_req: Request, res: Response): Promise<void> => {
   try {
     const processor = getProcessor();
     const store = getStore();
@@ -641,8 +647,8 @@ router.get('/ingest/status', async (req: Request, res: Response) => {
 
     // Check if embeddings exist
     const { nodes: sampleMovies } = await store.queryMovies({ limit: 10 });
-    const moviesWithEmbeddings = sampleMovies.filter(
-      (m: MovieNode) => m.embedding && m.embedding.length > 0
+    const moviesWithEmbeddings = (sampleMovies as MovieNode[]).filter(
+      (m) => m.embedding && m.embedding.length > 0
     ).length;
 
     res.json({

@@ -19,7 +19,6 @@ import {
   MovieCountryEdge,
   MovieLanguageEdge,
   MovieKeywordEdge,
-  GraphNode,
   Hyperedge,
   DistributionStatus,
 } from './schema';

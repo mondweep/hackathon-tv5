@@ -13,7 +13,7 @@ import { GCSReader, getGCSReader } from './gcs-reader';
 import { KnowledgeGraphProcessor, getProcessor, ProcessedMovie } from './processor';
 import { KnowledgeGraphStore, getStore } from './store';
 import { VertexAIEmbeddings, getEmbeddingsInstance } from '../vertex-ai/embeddings';
-import { TMDBMovieRow, MovieNode } from './schema';
+import { TMDBMovieRow } from './schema';
 
 /**
  * Ingestion configuration

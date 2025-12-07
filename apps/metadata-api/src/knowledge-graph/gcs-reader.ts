@@ -6,7 +6,7 @@
  */
 
 import { Storage } from '@google-cloud/storage';
-import { Readable, Transform } from 'stream';
+import { Transform } from 'stream';
 import { parse } from 'csv-parse';
 import { logger } from '../utils/logger';
 import { TMDBMovieRow } from './schema';
@@ -99,7 +99,7 @@ export class GCSReader {
 
     // Track bytes read
     const byteCounter = new Transform({
-      transform(chunk, encoding, callback) {
+      transform(chunk, _encoding, callback) {
         bytesRead += chunk.length;
         callback(null, chunk);
       },
