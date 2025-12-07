@@ -137,11 +137,12 @@ export class KnowledgeGraphStore {
 
     for (const processed of movies) {
       try {
-        // Movie
+        // Movie - use JSON parse/stringify to clean undefined values and ensure plain object
+        const cleanMovieData = JSON.parse(JSON.stringify(processed.movie));
         operations.push({
           type: 'set',
-          ref: this.db.collection(COLLECTIONS.MOVIES).doc(processed.movie.id),
-          data: processed.movie,
+          ref: this.db.collection(COLLECTIONS.MOVIES).doc(String(processed.movie.id)),
+          data: cleanMovieData,
         });
 
         // Genres (deduplicated by cache in processor)
