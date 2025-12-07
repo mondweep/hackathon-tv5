@@ -61,9 +61,9 @@ steps:
       - '-c'
       - |
         sleep 10
-        SERVICE_URL=$(gcloud run services describe ${_SERVICE_NAME} --platform=managed --region=${_REGION} --format='value(status.url)')
-        echo "Service URL: $SERVICE_URL"
-        curl -sf "$SERVICE_URL/health" && echo "✅ Health check passed" || echo "❌ Health check failed"
+        SVC_URL=$$(gcloud run services describe ${_SERVICE_NAME} --platform=managed --region=${_REGION} --format='value(status.url)')
+        echo "Service URL: $$SVC_URL"
+        curl -sf "$$SVC_URL/health" && echo "Health check passed" || echo "Health check failed"
     waitFor: ['deploy-api']
 
 images:
