@@ -4,7 +4,7 @@
  * Body: { "query": "movies about redemption", "limit": 10 }
  *
  * Supports both:
- * - Semantic search (if embeddings are available and OPENAI_API_KEY is set)
+ * - Semantic search (if embeddings available and GOOGLE_GEMINI_API_KEY is set)
  * - Text-based fallback search
  */
 
@@ -62,26 +62,32 @@ function cosineSimilarity(a, b) {
   return dotProduct / (normA * normB);
 }
 
-// Get embedding for query from OpenAI
+// Get embedding for query from Gemini
 async function getQueryEmbedding(query, apiKey) {
-  const response = await fetch('https://api.openai.com/v1/embeddings', {
+  const model = 'text-embedding-004';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'text-embedding-3-small',
-      input: query,
+      model: `models/${model}`,
+      content: {
+        parts: [{ text: query }]
+      },
+      taskType: 'RETRIEVAL_QUERY', // Use QUERY type for search queries
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status}`);
+    const error = await response.text();
+    throw new Error(`Gemini API error: ${response.status} - ${error}`);
   }
 
   const data = await response.json();
-  return data.data[0].embedding;
+  return data.embedding.values;
 }
 
 // Semantic search using embeddings
@@ -202,16 +208,16 @@ exports.handler = async (event, context) => {
     const data = loadData();
     const movies = data.data.movies || [];
 
-    // Check if we can do semantic search
-    const apiKey = process.env.OPENAI_API_KEY;
-    const canDoSemantic = hasEmbeddings && apiKey;
+    // Check if we can do semantic search (prefer Gemini, fall back to OpenAI)
+    const geminiKey = process.env.GOOGLE_GEMINI_API_KEY;
+    const canDoSemantic = hasEmbeddings && geminiKey;
 
     let results;
     let searchType;
 
     if (canDoSemantic) {
       try {
-        results = await semanticSearch(movies, query, limit, apiKey);
+        results = await semanticSearch(movies, query, limit, geminiKey);
         searchType = 'semantic';
       } catch (error) {
         console.error('Semantic search failed, falling back to text:', error.message);
