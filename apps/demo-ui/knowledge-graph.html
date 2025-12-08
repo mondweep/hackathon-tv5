@@ -1260,6 +1260,16 @@
                             >
                         </template>
                         <div class="absolute inset-0 bg-gradient-to-t from-gray-900 to-transparent"></div>
+                        <!-- Play Trailer Button -->
+                        <button
+                            @click="loadTrailer(selectedMovie)"
+                            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-4 bg-red-600 hover:bg-red-700 hover:scale-110 rounded-full transition-all shadow-lg"
+                            title="Play Trailer"
+                        >
+                            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                        </button>
                         <button
                             @click="selectedMovie = null"
                             class="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 rounded-full"
@@ -1324,6 +1334,36 @@
         </div>
     </div>
 
+    <!-- Trailer Modal -->
+    <div
+        x-show="showTrailerModal"
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-200"
+        class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+        @click.self="showTrailerModal = false; trailerKey = null"
+    >
+        <div class="relative w-full max-w-4xl aspect-video">
+            <button
+                @click="showTrailerModal = false; trailerKey = null"
+                class="absolute -top-12 right-0 p-2 text-white hover:text-gray-300 transition-colors"
+            >
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+            <iframe
+                x-show="trailerKey"
+                :src="'https://www.youtube.com/embed/' + trailerKey + '?autoplay=1'"
+                class="w-full h-full rounded-xl"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+            ></iframe>
+        </div>
+    </div>
+
     <script>
         // API Configuration
         // Use relative URLs on Netlify (redirects handle routing to functions)
@@ -1331,6 +1371,10 @@
         const API_BASE = window.location.hostname === 'localhost'
             ? 'http://localhost:8080'
             : '';  // Empty string = relative URLs, Netlify redirects handle the rest
+
+        // TMDB API for trailers
+        const TMDB_API_KEY = '9011f8eb83bea7ca6bf6ced06548027d';
+        const TMDB_BASE = 'https://api.themoviedb.org/3';
 
         function knowledgeGraphApp() {
             return {
@@ -1355,6 +1399,8 @@
                 genres: [],
                 selectedMovie: null,
                 hasMoreMovies: false,
+                showTrailerModal: false,
+                trailerKey: null,
 
                 // Filters
                 movieFilters: {
@@ -1467,6 +1513,25 @@
 
                 selectMovie(movie) {
                     this.selectedMovie = movie;
+                },
+
+                async loadTrailer(movie) {
+                    if (!movie || !movie.id) return;
+                    try {
+                        const response = await fetch(`${TMDB_BASE}/movie/${movie.id}/videos?api_key=${TMDB_API_KEY}`);
+                        const data = await response.json();
+                        const trailer = data.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube') ||
+                                       data.results?.find(v => v.site === 'YouTube');
+                        if (trailer) {
+                            this.trailerKey = trailer.key;
+                            this.showTrailerModal = true;
+                        } else {
+                            alert('No trailer available for this movie');
+                        }
+                    } catch (error) {
+                        console.error('Failed to load trailer:', error);
+                        alert('Failed to load trailer');
+                    }
                 },
 
                 // Genres
