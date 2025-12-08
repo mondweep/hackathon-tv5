@@ -394,21 +394,21 @@
                 <!-- Platform Selection -->
                 <div class="flex justify-center gap-4 mb-8">
                     <button
-                        @click="feedPlatform = 'netflix'"
+                        @click="feedPlatform = 'netflix'; updateFeedPreview()"
                         :class="feedPlatform === 'netflix' ? 'badge-netflix' : 'bg-gray-800 hover:bg-gray-700'"
                         class="px-6 py-3 rounded-lg font-medium transition-colors"
                     >
                         Netflix IMF
                     </button>
                     <button
-                        @click="feedPlatform = 'amazon'"
+                        @click="feedPlatform = 'amazon'; updateFeedPreview()"
                         :class="feedPlatform === 'amazon' ? 'badge-amazon' : 'bg-gray-800 hover:bg-gray-700'"
                         class="px-6 py-3 rounded-lg font-medium transition-colors"
                     >
                         Amazon MEC
                     </button>
                     <button
-                        @click="feedPlatform = 'fast'"
+                        @click="feedPlatform = 'fast'; updateFeedPreview()"
                         :class="feedPlatform === 'fast' ? 'badge-fast' : 'bg-gray-800 hover:bg-gray-700'"
                         class="px-6 py-3 rounded-lg font-medium transition-colors"
                     >
@@ -1326,9 +1326,11 @@
 
     <script>
         // API Configuration
+        // Use relative URLs on Netlify (redirects handle routing to functions)
+        // Use localhost for local development
         const API_BASE = window.location.hostname === 'localhost'
             ? 'http://localhost:8080'
-            : 'https://nexus-ummid-api-181630922804.us-central1.run.app';
+            : '';  // Empty string = relative URLs, Netlify redirects handle the rest
 
         function knowledgeGraphApp() {
             return {

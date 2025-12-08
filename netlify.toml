@@ -7,10 +7,54 @@
   # No build command needed - it's pure static HTML
   command = "echo 'Static site - no build needed'"
 
+  # Functions directory
+  functions = "netlify/functions"
+
 [build.environment]
   NODE_VERSION = "18"
 
-# Redirects for SPA (if needed in future)
+# Functions configuration
+[functions]
+  # Include the data file with functions
+  included_files = ["mondweep/*.json"]
+
+# API redirects - route /api/v1/knowledge-graph/* to Netlify Functions
+[[redirects]]
+  from = "/api/v1/knowledge-graph/stats"
+  to = "/.netlify/functions/kg-stats"
+  status = 200
+
+[[redirects]]
+  from = "/api/v1/knowledge-graph/movies"
+  to = "/.netlify/functions/kg-movies"
+  status = 200
+
+[[redirects]]
+  from = "/api/v1/knowledge-graph/movies/:id"
+  to = "/.netlify/functions/kg-movie?id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/api/v1/knowledge-graph/genres"
+  to = "/.netlify/functions/kg-genres"
+  status = 200
+
+[[redirects]]
+  from = "/api/v1/knowledge-graph/search"
+  to = "/.netlify/functions/kg-search"
+  status = 200
+
+[[redirects]]
+  from = "/api/v1/knowledge-graph/search/semantic"
+  to = "/.netlify/functions/kg-search"
+  status = 200
+
+[[redirects]]
+  from = "/api/v1/knowledge-graph/edges"
+  to = "/.netlify/functions/kg-edges"
+  status = 200
+
+# Fallback for SPA - must be LAST
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -24,6 +68,14 @@
     X-Content-Type-Options = "nosniff"
     X-XSS-Protection = "1; mode=block"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# CORS headers for API
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
 
 # Cache static assets
 [[headers]]
