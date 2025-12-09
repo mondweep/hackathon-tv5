@@ -4,7 +4,7 @@
  * Body: { "query": "movies about redemption", "limit": 10 }
  */
 
-const { Pinecone } = require('@pinecone-database/pinecone'); // Optional usage if we had the lib, but we use fetch for lighter bundle
+// const { Pinecone } = require('@pinecone-database/pinecone'); // Removed to avoid dependency error, using fetch instead
 
 exports.handler = async (event, context) => {
   const headers = {
