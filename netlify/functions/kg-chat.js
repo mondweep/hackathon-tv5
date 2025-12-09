@@ -52,20 +52,39 @@ Your Goal: Help the user explore these movies or find new ones.
 
         // Format history for Gemini (checking for 'user' vs 'model' roles)
         // Gemini API expects: { role: 'user'|'model', parts: [{ text: '...' }] }
-        const contents = messages.map(msg => ({
-            role: msg.role === 'user' ? 'user' : 'model',
-            parts: [{ text: msg.content }]
-        }));
+        // Format history for Gemini (checking for 'user' vs 'model' roles)
+        // Gemini API expects: { role: 'user'|'model', parts: [{ text: '...' }] }
+        // IMPORTANT: The conversation MUST start with a user message.
+        // We filter out any initial 'model' messages (like the welcome message).
 
-        // Add system instruction effectively by prepending it to the first user message or just rely on the model's context window
-        // Gemini 1.5 allows system_instruction, but for simple REST call we can prepend to history or use 'system' if supported. 
-        // Standard approach: Prepend context to the latest prompt or first prompt.
-        // Let's prepend to the very first message for context setting.
-        if (contents.length > 0) {
-            contents[0].parts[0].text = systemInstruction + "\n\nUser: " + contents[0].parts[0].text;
+        let contents = messages
+            .filter((msg, index) => {
+                // If it's the first message and it's from model, skip it
+                if (index === 0 && msg.role === 'model') return false;
+                // Basic cleanup of consecutive roles if needed (though UI handles this usually)
+                return true;
+            })
+            .map(msg => ({
+                role: msg.role === 'user' ? 'user' : 'model',
+                parts: [{ text: msg.content }]
+            }));
+
+        // Double check: if still empty or starts with model, force fix or fail gracefully
+        if (contents.length === 0 || contents[0].role !== 'user') {
+            // If user hasn't said anything yet, we can't really "chat" in this API structure easily without a prompt
+            // But usually this function is called AFTER user says something.
+            // If we ended up with a model message first (e.g. from history filtering weirdness), skip it
+            if (contents.length > 0 && contents[0].role === 'model') {
+                contents.shift();
+            }
+        }
+
+        // Add system instruction effectively by prepending it to the first user message
+        if (contents.length > 0 && contents[0].role === 'user') {
+            contents[0].parts[0].text = systemInstruction + "\n\nUser Question: " + contents[0].parts[0].text;
         } else {
-            // Should not happen if messages array is valid
-            contents.push({ role: 'user', parts: [{ text: systemInstruction }] });
+            // Fallback if no user message found (should be impossible if triggered by user input)
+            contents = [{ role: 'user', parts: [{ text: systemInstruction + "\n\n(User sent empty message)" }] }];
         }
 
         // Call Gemini API
