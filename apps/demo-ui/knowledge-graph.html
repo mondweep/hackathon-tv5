@@ -2636,11 +2636,18 @@
                             let errorMessage = "Sorry, I encountered an error talking to the server.";
                             try {
                                 const errData = await response.json();
-                                if (errData.details) {
-                                    errorMessage += `\n\nDetails: ${errData.details}`;
-                                }
-                                if (errData.debugKey) {
-                                    errorMessage += `\n(Key used starts with: ${errData.debugKey})`;
+                                // Check for Quota/Rate Limit errors (429)
+                                if (errData.details && errData.details.includes('429') && errData.details.includes('RESOURCE_EXHAUSTED')) {
+                                    errorMessage = "⚠️ usage limit reached. The AI service is currently busy or you have exceeded your free tier quota. Please try again in about a minute.";
+                                } else {
+                                    // Helper for other errors
+                                    if (errData.details) {
+                                        // Clean up JSON dump if possible, or just show it
+                                        errorMessage += `\n\nTechnical Details: ${errData.details}`;
+                                    }
+                                    if (errData.debugKey) {
+                                        errorMessage += `\n(API Key prefix: ${errData.debugKey})`;
+                                    }
                                 }
                             } catch (e) {
                                 console.error("Could not parse error response", e);
